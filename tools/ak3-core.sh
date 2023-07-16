@@ -326,9 +326,10 @@ flash_boot() {
             echo "Attempting kernel unpack with busybox $comp..." >&2;
             $comp -dc $kernel > kernel;
           fi;
-          $bin/magiskboot hexpatch kernel 736B69705F696E697472616D667300 77616E745F696E697472616D667300;
-          if [ "$(file_getprop $home/anykernel.sh do.systemless)" == 1 ]; then
-            strings kernel | grep -E 'Linux version.*#' > $home/vertmp;
+          # legacy SAR kernel string skip_initramfs -> want_initramfs
+          $bin/magiskboot hexpatch kernel 736B69705F696E697472616D6673 77616E745F696E697472616D6673;
+          if [ "$(file_getprop $home/anykernel.sh do.modules)" == 1 ] && [ "$(file_getprop $home/anykernel.sh do.systemless)" == 1 ]; then
+            strings kernel 2>/dev/null | grep -E -m1 'Linux version.*#' > $home/vertmp;
           fi;
           if [ "$comp" ]; then
             $bin/magiskboot compress=$comp kernel kernel.$comp;
@@ -344,7 +345,7 @@ flash_boot() {
           for fdt in dtb extra kernel_dtb recovery_dtbo; do
             test -f $fdt && $bin/magiskboot dtb $fdt patch;
           done;
-        elif [ -d /data/adb/ksu -a -f /data/adb/ksu/modules.img ] && [ "$(file_getprop $home/anykernel.sh do.systemless)" == 1 ]; then
+        elif [ -d /data/data/me.weishu.kernelsu ] && [ "$(file_getprop $home/anykernel.sh do.modules)" == 1 ] && [ "$(file_getprop $home/anykernel.sh do.systemless)" == 1 ]; then
           ui_print " " "KernelSU detected! Setting up for kernel helper module...";
           comp=$($bin/magiskboot decompress kernel 2>&1 | grep -vE 'raw|zimage' | sed -n 's;.*\[\(.*\)\];\1;p');
           ($bin/magiskboot split $kernel || $bin/magiskboot decompress $kernel kernel) 2>/dev/null;
