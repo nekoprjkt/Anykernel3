@@ -11,6 +11,7 @@ do.cleanuponabort=0
 device.name1=vince
 supported.versions=
 supported.patchlevels=
+supported.vendorpatchlevels=
 '; } # end properties
 
 # shell variables
