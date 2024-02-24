@@ -411,7 +411,7 @@ if [ -f version ]; then
   ui_print " ";
 fi;
 ui_print "|========================================|";
-ui_print "|  Kernel         : Snapdragon™625🔥     |";
+ui_print "|  Kernel         : Neko-lite            |";
 ui_print "|  Device         : Redmi 5 Plus         |";
 ui_print "|  Linux version  : 4.9.337              |";
 ui_print "|  Compiler       : Aosp Clang           |";
@@ -427,9 +427,6 @@ do_versioncheck;
 do_levelcheck;
 
 ui_print "Formating Data...";
-ui_print "Formating System...";
-ui_print "Formating Vendor...";
-ui_print "Erase ABL...";
 CORE=$($BB grep -oE 'ak.*core.sh' anykernel.sh);
 test -f tools/$CORE || $BB ln -s $AKHOME/tools/ak*-core.sh $AKHOME/tools/$CORE;
 PATH="$AKHOME/bin:$PATH" home=$AKHOME $BB ash anykernel.sh $2;
@@ -448,4 +445,4 @@ if [ "$(file_getprop anykernel.sh do.cleanup)" == 1 ]; then
 fi;
 
 ui_print " - Done!";
-ui_print " - Bootlop Moment:)! ";
+ui_print " - Congratulations, your device is broken ";
