@@ -411,11 +411,9 @@ if [ -f version ]; then
   ui_print " ";
 fi;
 ui_print "|========================================|";
-ui_print "|  Kernel         : Neko-lite            |";
+ui_print "|  Kernel         : NekoPrjkt            |";
 ui_print "|  Device         : Redmi 5 Plus         |";
-ui_print "|  Linux version  : 4.9.337              |";
-ui_print "|  Compiler       : Aosp Clang           |";
-ui_print "|  Made by        : Nekoprjkt            |";
+ui_print "|  Made by        : AL                   |";
 ui_print "|========================================|";
 ui_print "| AnyKernel3 by osm0sis @xda-developers. |";
 ui_print "==========================================";
