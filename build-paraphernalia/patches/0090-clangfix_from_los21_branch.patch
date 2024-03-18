@@ -1,0 +1,544 @@
+From 9aacf401c7915649b6e56ebe55c667e026b787c2 Mon Sep 17 00:00:00 2001
+From: Soumya Managoli <quic_c_smanag@quicinc.com>
+Date: Fri, 26 May 2023 10:27:32 +0530
+Subject: [PATCH] ASoC: titanium: msm-pcm-host-voice: Address buffer overflow
+ in hpcm copy
+
+Add check for the max hpcm_buf_node size before copy to avoid
+buffer out of bounds issue.
+
+Change-Id: Id647888430ce302359a857ef54d321bee99889bf
+Signed-off-by: Soumya Managoli <quic_c_smanag@quicinc.com>
+---
+ techpack/audio/titanium/asoc/msm-pcm-host-voice-v2.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/techpack/audio/titanium/asoc/msm-pcm-host-voice-v2.c b/techpack/audio/titanium/asoc/msm-pcm-host-voice-v2.c
+index fd771df5d3d4..c39dcda829ef 100644
+--- a/techpack/audio/titanium/asoc/msm-pcm-host-voice-v2.c
++++ b/techpack/audio/titanium/asoc/msm-pcm-host-voice-v2.c
+@@ -1,4 +1,5 @@
+ /* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -675,6 +676,11 @@ static void hpcm_copy_playback_data_from_queue(struct dai_data *dai_data,
+ 				struct hpcm_buf_node, list);
+ 		list_del(&buf_node->list);
+ 		*len = buf_node->frame.len;
++		if (*len > HPCM_MAX_VOC_PKT_SIZE) {
++			pr_err("%s: Playback data len %d overflow\n",
++					__func__, *len);
++			return;
++		}
+ 		memcpy((u8 *)dai_data->vocpcm_ion_buffer.kvaddr,
+ 		       &buf_node->frame.voc_pkt[0],
+ 		       buf_node->frame.len);
+@@ -702,6 +708,12 @@ static void hpcm_copy_capture_data_to_queue(struct dai_data *dai_data,
+ 	if (dai_data->substream == NULL)
+ 		return;
+ 
++	if (len > HPCM_MAX_VOC_PKT_SIZE) {
++		pr_err("%s: Copy capture data len %d overflow\n",
++				__func__, len);
++		return;
++	}
++
+ 	/* Copy out buffer packet into free_queue */
+ 	spin_lock_irqsave(&dai_data->dsp_lock, dsp_flags);
+ 
+From f5bb3593703c3bc854b0c89fa7037ba127ecad37 Mon Sep 17 00:00:00 2001
+From: Soumya Managoli <quic_c_smanag@quicinc.com>
+Date: Tue, 30 May 2023 13:07:18 +0530
+Subject: [PATCH] ASoC: titanium: msm-pcm-voip: Avoid interger underflow
+
+There is no check for voip pkt pkt_len,if it contains the
+minimum required data. This can lead to integer underflow.
+Add check for the same.
+
+Change-Id: I91d4f2ad8dfb060cdb2ab9e36dc9f886ea40908a
+Signed-off-by: Soumya Managoli <quic_c_smanag@quicinc.com>
+---
+ .../audio/titanium/asoc/msm-pcm-voip-v2.c     | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/techpack/audio/titanium/asoc/msm-pcm-voip-v2.c b/techpack/audio/titanium/asoc/msm-pcm-voip-v2.c
+index 02cee29e3c02..9ab3a2bbb8af 100644
+--- a/techpack/audio/titanium/asoc/msm-pcm-voip-v2.c
++++ b/techpack/audio/titanium/asoc/msm-pcm-voip-v2.c
+@@ -1,4 +1,5 @@
+ /* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -371,6 +372,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
+ 		switch (prtd->mode) {
+ 		case MODE_AMR_WB:
+ 		case MODE_AMR: {
++			if (pkt_len <= DSP_FRAME_HDR_LEN) {
++				pr_err("%s: pkt_len %d is < required len\n",
++						__func__, pkt_len);
++				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
++						dsp_flags);
++				return;
++			}
+ 			/* Remove the DSP frame info header. Header format:
+ 			 * Bits 0-3: Frame rate
+ 			 * Bits 4-7: Frame type
+@@ -391,6 +399,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
+ 		case MODE_4GV_NB:
+ 		case MODE_4GV_WB:
+ 		case MODE_4GV_NW: {
++			if (pkt_len <= DSP_FRAME_HDR_LEN) {
++				pr_err("%s: pkt_len %d is < required len\n",
++						__func__, pkt_len);
++				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
++						dsp_flags);
++				return;
++			}
+ 			/* Remove the DSP frame info header.
+ 			 * Header format:
+ 			 * Bits 0-3: frame rate
+@@ -428,6 +443,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
+ 			buf_node->frame.frm_hdr.timestamp = timestamp;
+ 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+ 
++			if (pkt_len <= 2 * DSP_FRAME_HDR_LEN) {
++				pr_err("%s: pkt_len %d is < required len\n",
++						__func__, pkt_len);
++				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
++						dsp_flags);
++				return;
++			}
+ 			/* There are two frames in the buffer. Length of the
+ 			 * first frame:
+ 			 */
+@@ -463,6 +485,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
+ 				buf_node->frame.frm_hdr.timestamp = timestamp;
+ 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+ 
++				if (pkt_len <= 2 * DSP_FRAME_HDR_LEN) {
++					pr_err("%s: pkt_len %d is < required len\n",
++							__func__, pkt_len);
++					spin_unlock_irqrestore(&prtd->dsp_ul_lock,
++							dsp_flags);
++					return;
++				}
+ 				/* There are two frames in the buffer. Length
+ 				 * of the second frame:
+ 				 */
+From 04913bfab92b8c31c13d1bd9620c9ec4f722f55c Mon Sep 17 00:00:00 2001
+From: vantoman <Mustafa.vantom@gmail.com>
+Date: Sun, 4 Jun 2023 13:39:51 +0200
+Subject: [PATCH] ipa_v2: Fix enum conversion warnings
+
+clang-15 complains:
+drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c:499:41: error: implicit
+conversion from enumeration type 'enum ipa_ip_type_enum_v01'
+to different enumeration type 'enum ipa_ip_type'
+[-Werror,-Wenum-conversion]
+        q6_ul_flt_rule_ptr->ip = flt_spec_ptr->ip_type;
+                               ~ ~~~~~~~~~~~~~~^~~~~~~
+drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c:500:45: error: implicit
+conversion from enumeration type 'enum ipa_filter_action_enum_v01'
+to different enumeration type 'enum ipa_flt_action'
+[-Werror,-Wenum-conversion]
+        q6_ul_flt_rule_ptr->action = flt_spec_ptr->filter_action;
+                                   ~ ~~~~~~~~~~~~~~^~~~~~~~~~~~~
+2 errors generated.
+
+Change-Id: I7a40b0d7b082836670b6551f2a04aa141d240153
+---
+ drivers/platform/msm/ipa/ipa_v2/rmnet_ipa.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_v2/rmnet_ipa.c b/drivers/platform/msm/ipa/ipa_v2/rmnet_ipa.c
+index fce4132c8a89..6a59ffc89607 100644
+--- a/drivers/platform/msm/ipa/ipa_v2/rmnet_ipa.c
++++ b/drivers/platform/msm/ipa/ipa_v2/rmnet_ipa.c
+@@ -439,9 +439,9 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
+ 			UL_FILTER_RULE_HANDLE_START + i;
+ 		rule_hdl[i] = ipa_qmi_ctx->q6_ul_filter_rule[i].filter_hdl;
+ 		ipa_qmi_ctx->q6_ul_filter_rule[i].ip =
+-			rule_req->filter_spec_list[i].ip_type;
++			(enum ipa_ip_type)rule_req->filter_spec_list[i].ip_type;
+ 		ipa_qmi_ctx->q6_ul_filter_rule[i].action =
+-			rule_req->filter_spec_list[i].filter_action;
++			(enum ipa_flt_action)rule_req->filter_spec_list[i].filter_action;
+ 		if (rule_req->filter_spec_list[i].is_routing_table_index_valid
+ 			== true)
+ 			ipa_qmi_ctx->q6_ul_filter_rule[i].rt_tbl_idx =
+From 2e2aed3c5f897a45129f5035b0fb3922d49a99ac Mon Sep 17 00:00:00 2001
+From: siimsek <malisimsek17@gmail.com>
+Date: Sun, 18 Sep 2022 03:24:02 -0400
+Subject: [PATCH] titanium: ASoC: wcd_cpe: Fix enum-conversion warnings
+
+techpack/audio/asoc/codecs/wcd_cpe_services.c:658:17: error: implicit
+conversion from enumeration type 'enum cpe_svc_result' to different
+enumeration type 'enum cmi_api_result' [-Werror,-Wenum-conversion]
+        notif.result = result;
+                     ~ ^~~~~~
+techpack/audio/asoc/codecs/wcd_cpe_services.c:1350:8: error: implicit
+conversion from enumeration type 'enum cpe_svc_result' to different
+enumeration type 'enum cpe_process_result' [-Werror,-Wenum-conversion]
+                rc = cpe_send_msg_to_inbox(t_info, 0, m);
+                   ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+
+Change-Id: Ib9fce60017066e9c96e79195d7dba9ffb9177148
+---
+ techpack/audio/titanium/asoc/codecs/wcd_cpe_services.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/techpack/audio/titanium/asoc/codecs/wcd_cpe_services.c b/techpack/audio/titanium/asoc/codecs/wcd_cpe_services.c
+index e584cf05a6ef..ad2ec5abfe23 100644
+--- a/techpack/audio/titanium/asoc/codecs/wcd_cpe_services.c
++++ b/techpack/audio/titanium/asoc/codecs/wcd_cpe_services.c
+@@ -655,7 +655,7 @@ static void cpe_notify_cmi_client(struct cpe_info *t_info, u8 *payload,
+ 	service = CMI_HDR_GET_SERVICE(hdr);
+ 
+ 	notif.event = CMI_API_MSG;
+-	notif.result = result;
++	notif.result = (enum cmi_api_result)result;
+ 	notif.message = payload;
+ 
+ 	CPE_SVC_GRAB_LOCK(&cpe_d.cpe_svc_lock, "cpe_svc");
+@@ -1347,7 +1347,8 @@ static enum cpe_process_result cpe_mt_process_cmd(
+ 
+ 		cpe_change_state(t_info, CPE_STATE_SENDING_MSG,
+ 				CPE_SS_MSG_SEND_INBOX);
+-		rc = cpe_send_msg_to_inbox(t_info, 0, m);
++		rc = (enum cpe_process_result)cpe_send_msg_to_inbox(t_info, 0,
++				m);
+ 		break;
+ 
+ 	case CPE_CMD_SEND_MSG_COMPLETE:
+From 3962d4cf1f3cc52e4f683ca8033824b1b920ef2c Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Sat, 28 Oct 2023 12:19:27 +0000
+Subject: [PATCH] video: fbdev: Fix prototype error
+
+Change-Id: Ieb806e67bf4455e8db330ae6da50931898917ccf
+---
+ drivers/video/fbdev/msm/mdss_mdp.c  | 2 +-
+ drivers/video/fbdev/msm/mdss_util.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/fbdev/msm/mdss_mdp.c b/drivers/video/fbdev/msm/mdss_mdp.c
+index f16bbe4423eb..99710ca2e3e8 100644
+--- a/drivers/video/fbdev/msm/mdss_mdp.c
++++ b/drivers/video/fbdev/msm/mdss_mdp.c
+@@ -4648,7 +4648,7 @@ struct mdss_panel_cfg *mdss_panel_intf_type(int intf_val)
+ }
+ EXPORT_SYMBOL(mdss_panel_intf_type);
+ 
+-struct irq_info *mdss_intr_line()
++struct irq_info *mdss_intr_line(void)
+ {
+ 	return mdss_mdp_hw.irq_info;
+ }
+diff --git a/drivers/video/fbdev/msm/mdss_util.c b/drivers/video/fbdev/msm/mdss_util.c
+index a5fb8b68f67c..17645e62f44f 100644
+--- a/drivers/video/fbdev/msm/mdss_util.c
++++ b/drivers/video/fbdev/msm/mdss_util.c
+@@ -252,7 +252,7 @@ struct mdss_util_intf mdss_util = {
+ 	.display_disabled = false
+ };
+ 
+-struct mdss_util_intf *mdss_get_util_intf()
++struct mdss_util_intf *mdss_get_util_intf(void)
+ {
+ 	return &mdss_util;
+ }
+From 71cf03a5031477a1af246d1542817cab0d7f664d Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Sat, 28 Oct 2023 12:21:37 +0000
+Subject: [PATCH] staging: prima: Fix prototype errors
+
+Change-Id: I3c8197ed35e05dfca0ab7124185135a9a83591f3
+---
+ drivers/staging/prima/CORE/HDD/src/wlan_hdd_main.c        | 4 ++--
+ drivers/staging/prima/CORE/HDD/src/wlan_hdd_oemdata.c     | 2 +-
+ drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c       | 4 ++--
+ drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c     | 2 +-
+ .../prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c    | 8 ++++----
+ drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c | 2 +-
+ drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c     | 2 +-
+ drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c          | 2 +-
+ drivers/staging/prima/CORE/VOSS/src/vos_timer.c           | 2 +-
+ drivers/staging/prima/CORE/VOSS/src/vos_trace.c           | 8 ++++----
+ drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c         | 2 +-
+ drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c      | 2 +-
+ .../staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c | 2 +-
+ 13 files changed, 21 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_main.c b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_main.c
+index 3797410e4080..639c13a345d3 100644
+--- a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_main.c
++++ b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_main.c
+@@ -8924,7 +8924,7 @@ static int hdd_ParseIBSSTXFailEventParams(tANI_U8 *pValue,
+    return ret;
+ }
+ 
+-static int hdd_open_cesium_nl_sock()
++static int hdd_open_cesium_nl_sock(void)
+ {
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
+    struct netlink_kernel_cfg cfg = {
+@@ -8955,7 +8955,7 @@ static int hdd_open_cesium_nl_sock()
+    return ret;
+ }
+ 
+-static void hdd_close_cesium_nl_sock()
++static void hdd_close_cesium_nl_sock(void)
+ {
+    if (NULL != cesium_nl_srv_sock)
+    {
+diff --git a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_oemdata.c b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_oemdata.c
+index df015ac40a5f..44fc3f577269 100644
+--- a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_oemdata.c
++++ b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_oemdata.c
+@@ -1001,7 +1001,7 @@ int oem_activate_service(void *pAdapter)
+ 
+   \return - none
+   --------------------------------------------------------------------------*/
+-void oem_deactivate_service()
++void oem_deactivate_service(void)
+ {
+    /* unregister the msg handler for msgs addressed to WLAN_NL_MSG_OEM */
+    nl_srv_unregister(WLAN_NL_MSG_OEM, __oem_msg_callback);
+diff --git a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c
+index 6bc682a29556..3f86193a5d5d 100644
+--- a/drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c
++++ b/drivers/staging/prima/CORE/HDD/src/wlan_hdd_trace.c
+@@ -131,7 +131,7 @@ void hddTraceDump(void *pMac, tpvosTraceRecord pRecord, tANI_U16 recIndex)
+     }
+ }
+ 
+-void hddTraceInit()
++void hddTraceInit(void)
+ {
+     vosTraceRegister(VOS_MODULE_ID_HDD, (tpvosTraceCb)&hddTraceDump);
+ }
+@@ -193,7 +193,7 @@ static void hdd_state_info_dump(void)
+  * hdd_register_debug_callback() - registration function for hdd layer
+  * to print hdd state information
+  */
+-void hdd_register_debug_callback()
++void hdd_register_debug_callback(void)
+ {
+     vos_register_debug_callback(VOS_MODULE_ID_HDD, &hdd_state_info_dump);
+ }
+diff --git a/drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c b/drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c
+index 489544bd1507..1267d0575743 100644
+--- a/drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c
++++ b/drivers/staging/prima/CORE/SVC/src/btc/wlan_btc_svc.c
+@@ -225,7 +225,7 @@ int btc_activate_service(void *pAdapter)
+ 
+   \return - none
+   --------------------------------------------------------------------------*/
+-void btc_deactivate_service()
++void btc_deactivate_service(void)
+ {
+    //unregister the msg handler for msgs addressed to ANI_NL_MSG_BTC
+    nl_srv_unregister(WLAN_NL_MSG_BTC, btc_msg_callback);
+diff --git a/drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c b/drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c
+index 434d6e6a5342..d96ecd33d070 100644
+--- a/drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c
++++ b/drivers/staging/prima/CORE/SVC/src/logging/wlan_logging_sock_svc.c
+@@ -594,7 +594,7 @@ int wlan_pkt_stats_to_user(void *perPktStat)
+ 	return 0;
+ }
+ 
+-void wlan_disable_and_flush_pkt_stats()
++void wlan_disable_and_flush_pkt_stats(void)
+ {
+ 	unsigned long flags;
+ 	int ret = 0;
+@@ -1995,7 +1995,7 @@ void wlan_process_done_indication(uint8 type, uint32 reason_code)
+  * wlan_flush_host_logs_for_fatal() -flush host logs and send
+  * fatal event to upper layer.
+  */
+-void wlan_flush_host_logs_for_fatal()
++void wlan_flush_host_logs_for_fatal(void)
+ {
+ 	unsigned long flags;
+ 
+@@ -2061,7 +2061,7 @@ void wlan_set_fwr_mem_dump_state(enum FW_MEM_DUMP_STATE fw_mem_dump_state)
+ 	spin_unlock_irqrestore(&gwlan_logging.fw_mem_dump_ctx.fw_mem_dump_lock, flags);
+ }
+ /*check for new request validity and free memory if present from previous request */
+-bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(){
++bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(void){
+ 	unsigned long flags;
+ 	bool ret = false;
+ 	bool write_done = false;
+@@ -2084,7 +2084,7 @@ bool wlan_fwr_mem_dump_test_and_set_write_allowed_bit(){
+ 	return ret;
+ }
+ 
+-bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(){
++bool wlan_fwr_mem_dump_test_and_set_read_allowed_bit(void){
+ 	unsigned long flags;
+ 	bool ret=false;
+ 	spin_lock_irqsave(&gwlan_logging.fw_mem_dump_ctx.fw_mem_dump_lock, flags);
+diff --git a/drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c b/drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c
+index 0018fc3fa48a..5a3d401634b7 100644
+--- a/drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c
++++ b/drivers/staging/prima/CORE/SVC/src/nlink/wlan_nlink_srv.c
+@@ -404,7 +404,7 @@ void nl_srv_nl_close_indication
+  * Return: Return -EPERM if the service is not initialized
+  *
+  */
+-int nl_srv_is_initialized()
++int nl_srv_is_initialized(void)
+ {
+    if (nl_srv_sock)
+        return 0;
+diff --git a/drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c b/drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c
+index 703288c0fc22..b6e57b3d4bc2 100644
+--- a/drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c
++++ b/drivers/staging/prima/CORE/TL/src/wlan_qct_tl_trace.c
+@@ -72,7 +72,7 @@ void tlTraceDump(void *pMac, tpvosTraceRecord pRecord, v_U16_t recIndex)
+                        pRecord->data));
+ }
+ 
+-void tlTraceInit()
++void tlTraceInit(void)
+ {
+    vosTraceRegister(VOS_MODULE_ID_TL, (tpvosTraceCb)&tlTraceDump);
+ }
+diff --git a/drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c b/drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c
+index 8eab5e7ba1ac..7677085b825d 100644
+--- a/drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c
++++ b/drivers/staging/prima/CORE/VOSS/src/vos_nvitem.c
+@@ -3000,7 +3000,7 @@ v_U8_t vos_freq_to_chan(v_U32_t freq)
+ }
+ 
+ /* function to tell about if Default country is Non-Zero */
+-v_BOOL_t vos_is_nv_country_non_zero()
++v_BOOL_t vos_is_nv_country_non_zero(void)
+ {
+     v_BOOL_t  status = VOS_FALSE;
+     if (!(pnvEFSTable->halnv.tables.defaultCountryTable.countryCode[0] == '0' &&
+diff --git a/drivers/staging/prima/CORE/VOSS/src/vos_timer.c b/drivers/staging/prima/CORE/VOSS/src/vos_timer.c
+index ad2f5e626a9c..b993ab9dcc92 100644
+--- a/drivers/staging/prima/CORE/VOSS/src/vos_timer.c
++++ b/drivers/staging/prima/CORE/VOSS/src/vos_timer.c
+@@ -1018,7 +1018,7 @@ void vos_wdthread_init_timer_work(void *callbackptr)
+  * Flush watchdog thread timer work structure.
+  * return - void
+  */
+-void vos_wdthread_flush_timer_work()
++void vos_wdthread_flush_timer_work(void)
+ {
+    pVosContextType context;
+ 
+diff --git a/drivers/staging/prima/CORE/VOSS/src/vos_trace.c b/drivers/staging/prima/CORE/VOSS/src/vos_trace.c
+index fda24aa2fc80..5591dd7c40ff 100644
+--- a/drivers/staging/prima/CORE/VOSS/src/vos_trace.c
++++ b/drivers/staging/prima/CORE/VOSS/src/vos_trace.c
+@@ -436,7 +436,7 @@ void vosTraceEnable(v_U32_t bitmask_of_moduleId, v_U8_t enable)
+   Called immediately after vos_preopen, so that we can start recording HDD
+   events ASAP.
+   ----------------------------------------------------------------------------*/
+-void vosTraceInit()
++void vosTraceInit(void)
+ {
+     v_U8_t i;
+     gvosTraceData.head = INVALID_VOS_TRACE_ADDR;
+@@ -453,7 +453,7 @@ void vosTraceInit()
+     }
+ }
+ 
+-void vos_register_debugcb_init()
++void vos_register_debugcb_init(void)
+ {
+     v_U8_t i;
+ 
+@@ -545,7 +545,7 @@ void vos_trace(v_U8_t module, v_U8_t code, v_U8_t session, v_U32_t data)
+   This function will be called from vos_preOpen, we will have lock available
+   to use ASAP.
+   ----------------------------------------------------------------------------*/
+-VOS_STATUS vos_trace_spin_lock_init()
++VOS_STATUS vos_trace_spin_lock_init(void)
+ {
+     spin_lock_init(&ltraceLock);
+ 
+@@ -692,7 +692,7 @@ void vos_register_debug_callback(VOS_MODULE_ID moduleID,
+  * its callback to print its state information.
+  * @cb_context: call back context to be passed
+  */
+-void vos_state_info_dump_all()
++void vos_state_info_dump_all(void)
+ {
+     v_U8_t module;
+ 
+diff --git a/drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c b/drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c
+index 24419b7c17ff..6dd9d218ae4d 100644
+--- a/drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c
++++ b/drivers/staging/prima/CORE/WDA/src/wlan_qct_wda.c
+@@ -21782,7 +21782,7 @@ void WDA_TransportChannelDebug
+     NONE
+ 
+ ===========================================================================*/
+-void WDA_TransportKickDxe()
++void WDA_TransportKickDxe(void)
+ {
+    WDI_TransportKickDxe();
+    return;
+diff --git a/drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c b/drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c
+index 160c321e7164..5936065df867 100644
+--- a/drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c
++++ b/drivers/staging/prima/CORE/WDI/CP/src/wlan_qct_wdi.c
+@@ -31642,7 +31642,7 @@ void WDI_TransportChannelDebug
+  @see
+  @return none
+ */
+-void WDI_TransportKickDxe()
++void WDI_TransportKickDxe(void)
+ {
+    WDTS_ChannelKickDxe();
+    return;
+diff --git a/drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c b/drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c
+index 24b4decc242b..ac66f356bdb6 100644
+--- a/drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c
++++ b/drivers/staging/prima/CORE/WDI/TRP/DTS/src/wlan_qct_wdi_dts.c
+@@ -1413,7 +1413,7 @@ void WDTS_ChannelDebug(wpt_boolean displaySnapshot, wpt_uint8 debugFlags)
+  * Return Value: NONE
+  *
+  */
+-void WDTS_ChannelKickDxe()
++void WDTS_ChannelKickDxe(void)
+ {
+    gTransportDriver.kickDxe();
+    return;
+From b2e632c4140d7ec7b3014bdade47e4024513968a Mon Sep 17 00:00:00 2001
+From: andhu <quic_sandhu@quicinc.com>
+Date: Mon, 19 Dec 2022 10:58:35 -0800
+Subject: [PATCH] staging: prima: Fix compile error of mdie
+
+Fix compile error of mdie[SIR_MDIE_SIZE], use
+mdie[] instead.
+
+Change-Id: I934d3f02a19b511583141deeca7af5b4d4c0ef30
+CRs-Fixed: 3364146
+---
+ drivers/staging/prima/CORE/SYS/legacy/src/utils/src/parserApi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/staging/prima/CORE/SYS/legacy/src/utils/src/parserApi.c b/drivers/staging/prima/CORE/SYS/legacy/src/utils/src/parserApi.c
+index 66fffcfd31d3..aa752fb15c21 100644
+--- a/drivers/staging/prima/CORE/SYS/legacy/src/utils/src/parserApi.c
++++ b/drivers/staging/prima/CORE/SYS/legacy/src/utils/src/parserApi.c
+@@ -5476,7 +5476,7 @@ tSirRetStatus PopulateDot11fRRMIe( tpAniSirGlobal pMac, tDot11fIERRMEnabledCap *
+ 
+ #if defined WLAN_FEATURE_VOWIFI_11R
+ void PopulateMDIE( tpAniSirGlobal        pMac,
+-                   tDot11fIEMobilityDomain *pDot11f, tANI_U8 mdie[SIR_MDIE_SIZE] )
++                   tDot11fIEMobilityDomain *pDot11f, tANI_U8 mdie[] )
+ {
+    pDot11f->present = 1;
+    pDot11f->MDID = (tANI_U16)((mdie[1] << 8) | (mdie[0]));

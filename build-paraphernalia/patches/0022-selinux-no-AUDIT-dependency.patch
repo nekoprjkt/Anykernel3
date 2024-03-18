@@ -1,0 +1,48 @@
+Subject: [PATCH] selinux: Remove audit dependency
+--- a/include/linux/audit.h
++++ b/include/linux/audit.h
+@@ -212,6 +212,10 @@
+ static inline void audit_log_task_info(struct audit_buffer *ab,
+ 				       struct task_struct *tsk)
+ { }
++static inline int audit_update_lsm_rules(void)
++{
++	return 0;
++}
+ #define audit_enabled 0
+ #endif /* CONFIG_AUDIT */
+ 
+
+diff --git a/include/linux/lsm_audit.h b/include/linux/lsm_audit.h
+index 915330abf6e5..7ae9dcf89578 100644
+--- a/include/linux/lsm_audit.h
++++ b/include/linux/lsm_audit.h
+@@ -117,8 +117,16 @@ int ipv4_skb_to_auditdata(struct sk_buff *skb,
+ int ipv6_skb_to_auditdata(struct sk_buff *skb,
+ 		struct common_audit_data *ad, u8 *proto);
+ 
++#ifdef CONFIG_AUDIT
+ void common_lsm_audit(struct common_audit_data *a,
+ 	void (*pre_audit)(struct audit_buffer *, void *),
+ 	void (*post_audit)(struct audit_buffer *, void *));
++#else
++static inline void common_lsm_audit(struct common_audit_data *a,
++	void (*pre_audit)(struct audit_buffer *, void *),
++	void (*post_audit)(struct audit_buffer *, void *))
++{
++}
++#endif
+ 
+ #endif
+diff --git a/security/selinux/Kconfig b/security/selinux/Kconfig
+index 8297e48a283d..2728517339a1 100644
+--- a/security/selinux/Kconfig
++++ b/security/selinux/Kconfig
+@@ -1,6 +1,6 @@
+ config SECURITY_SELINUX
+ 	bool "NSA SELinux Support"
+-	depends on SECURITY_NETWORK && AUDIT && NET && INET
++	depends on SECURITY_NETWORK && NET && INET
+ 	select NETWORK_SECMARK
+ 	default n
+ 	help

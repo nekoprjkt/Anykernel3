@@ -1,0 +1,499 @@
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-cpu.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-cpu.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-cpu.dtsi	1970-01-01 08:00:00.000000000 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-cpu.dtsi	2023-11-07 09:57:04.256849844 +0800
+@@ -0,0 +1,72 @@
++&clock_cpu {
++	qcom,speed2-bin-v0-cl =
++		<          0 0>,
++		<  652800000 1>,
++		< 1036800000 2>,
++		< 1401600000 3>,
++		< 1689600000 4>,
++		< 1804800000 5>,
++		< 1958400000 6>,
++		< 2016000000 7>,
++		< 2150400000 8>,
++		< 2208000000 9>;
++	qcom,speed2-bin-v0-cci =
++		<          0 0>,
++		<  261120000 1>,
++		<  414720000 2>,
++		<  560640000 3>,
++		<  675840000 4>,
++		<  721920000 5>,
++		<  783360000 6>,
++		<  806400000 7>,
++		<  860160000 8>,
++		<  883200000 9>;
++};
++
++&cpubw {
++	qcom,bw-tbl =
++		<   769 /*  100.8 MHz */ >,
++		<  1611 /*  211.2 MHz */ >,
++		<  2124 /*  278.4 MHz */ >,
++		<  2929 /*  384   MHz */ >,
++		<  3221 /*  422.4 MHz */ >,
++		<  4248 /*  556.8 MHz */ >,
++		<  5126 /*  672   MHz */ >,
++		<  5859 /*  768   MHz */ >,
++		<  6152 /*  806.4 MHz */ >,
++		<  6445 /*  844.8 MHz */ >,
++		<  7104 /*  931.2 MHz */ >,
++		<  8133 /*  1066.0 MHz */ >;
++};
++
++&soc {
++	devfreq-cpufreq {
++		cpubw-cpufreq {
++			cpu-to-dev-map =
++				<  652800  1611>,
++				< 1036800  3221>,
++				< 1401600  5859>,
++				< 1689600  6445>,
++				< 1804800  7104>,
++				< 1958400  8133>,
++				< 2016000  8133>,
++				< 2150400  8133>,
++				< 2208000  8133>;
++		};
++		mincpubw-cpufreq {
++			cpu-to-dev-map =
++				<  652800  769 >,
++				< 1036800 1611 >,
++				< 1401600 3221 >,
++				< 2016000 6445 >;
++		};
++	};
++};
++
++&mincpubw_compute {
++	qcom,core-dev-table =
++		<  652800  769 >,
++		< 1036800 1611 >,
++		< 1401600 3221 >,
++		< 2016000 6445 >;
++};
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-gpu.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-gpu.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-gpu.dtsi	1970-01-01 08:00:00.000000000 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-gpu.dtsi	2023-11-07 09:57:04.256849844 +0800
+@@ -0,0 +1,119 @@
++/*
++ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++&clock_gcc_gfx {
++	qcom,gfxfreq-corner =
++		 <         0   0 >,
++		 < 133330000   1 >,  /* Min SVS   */
++		 < 216000000   2 >,  /* Low SVS   */
++		 < 320000000   3 >,  /* SVS       */
++		 < 400000000   4 >,  /* SVS Plus  */
++		 < 510000000   5 >,  /* NOM       */
++		 < 560000000   6 >,  /* Nom Plus  */
++		 < 650000000   7 >,  /* Turbo     */
++		 < 700000000   7 >,  /* Turbo     */
++		 < 725000000   7 >;  /* Turbo     */
++};
++
++&msm_gpu {
++
++	qcom,ca-target-pwrlevel = <4>;
++	qcom,initial-pwrlevel = <7>;
++	/delete-node/qcom,gpu-pwrlevels;
++
++	/* Power levels */
++	qcom,gpu-pwrlevels {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		compatible = "qcom,gpu-pwrlevels";
++		/* TURBO LD0 */
++		qcom,gpu-pwrlevel@0 {
++			reg = <0>;
++			qcom,gpu-freq = <725000000>;
++			qcom,bus-freq = <10>;
++			qcom,bus-min = <10>;
++			qcom,bus-max = <10>;
++		};
++
++		/* TURBO */
++		qcom,gpu-pwrlevel@1 {
++			reg = <1>;
++			qcom,gpu-freq = <650000000>;
++			qcom,bus-freq = <10>;
++			qcom,bus-min = <10>;
++			qcom,bus-max = <10>;
++		};
++
++		/* NOM+ */
++		qcom,gpu-pwrlevel@2 {
++			reg = <2>;
++			qcom,gpu-freq = <560000000>;
++			qcom,bus-freq = <10>;
++			qcom,bus-min = <8>;
++			qcom,bus-max = <10>;
++		};
++
++		/* NOM */
++		qcom,gpu-pwrlevel@3 {
++			reg = <3>;
++			qcom,gpu-freq = <510000000>;
++			qcom,bus-freq = <9>;
++			qcom,bus-min = <6>;
++			qcom,bus-max = <10>;
++		};
++
++		/* SVS+ */
++		qcom,gpu-pwrlevel@4 {
++			reg = <4>;
++			qcom,gpu-freq = <400000000>;
++			qcom,bus-freq = <7>;
++			qcom,bus-min = <5>;
++			qcom,bus-max = <8>;
++		};
++
++		/* SVS */
++		qcom,gpu-pwrlevel@5 {
++			reg = <5>;
++			qcom,gpu-freq = <320000000>;
++			qcom,bus-freq = <4>;
++			qcom,bus-min = <2>;
++			qcom,bus-max = <6>;
++		};
++
++		/* Low SVS */
++		qcom,gpu-pwrlevel@6 {
++			reg = <6>;
++			qcom,gpu-freq = <216000000>;
++			qcom,bus-freq = <1>;
++			qcom,bus-min = <1>;
++			qcom,bus-max = <4>;
++		};
++
++		qcom,gpu-pwrlevel@7 {
++			reg = <7>;
++			qcom,gpu-freq = <133300000>;
++			qcom,bus-freq = <1>;
++			qcom,bus-min = <1>;
++			qcom,bus-max = <4>;
++		};
++		/* XO */
++		qcom,gpu-pwrlevel@8 {
++			reg = <8>;
++			qcom,gpu-freq = <19200000>;
++			qcom,bus-freq = <0>;
++			qcom,bus-min = <0>;
++			qcom,bus-max = <0>;
++		};
++	};
++};
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-regulator.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-regulator.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-regulator.dtsi	1970-01-01 08:00:00.000000000 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/msm8953-oc-regulator.dtsi	2023-11-07 09:57:04.256849844 +0800
+@@ -0,0 +1,212 @@
++&apc_vreg {
++	qcom,cpr-speed-bin-corners =
++		<9 0 9 0 0 0 7 9>;
++
++	qcom,cpr-corners =
++		/* Speed bin 0 */
++		<9 9 9 9 9 9 9 9>,
++
++		/* Speed bin 1 */
++		<0 0 0 0 0 0 0 0>,
++
++		/* Speed bin 2 */
++		<9 9 9 9 9 9 9 9>,
++
++		/* Speed bin 3..5 */
++		<0 0 0 0 0 0 0 0>,
++		<0 0 0 0 0 0 0 0>,
++		<0 0 0 0 0 0 0 0>,
++
++		/* Speed bin 6 */
++		<7 7 7 7 7 7 7 7>,
++
++		/* Speed bin 7 */
++		<9 9 9 9 9 9 9 9>;
++
++	qcom,cpr-corner-fmax-map =
++		/* Speed bin 0 */
++		<1 2 4 9>,
++
++		/* Speed bin 1 */
++		<0 0 0 0>,
++
++		/* Speed bin 2 */
++		<1 2 4 9>,
++
++		/* Speed bin 3..5 */
++		<0 0 0 0>,
++		<0 0 0 0>,
++		<0 0 0 0>,
++
++		/* Speed bin 6 */
++		<1 2 4 7>,
++
++		/* Speed bin 7 */
++		<1 2 4 9>;
++
++	qcom,cpr-voltage-ceiling =
++		/* Speed bin 0 */
++		<605000  685000 735000 775000 815000
++		855000 895000 950000 990000>,
++
++		/* Speed bin 2 */
++		<605000  685000 735000 775000 815000
++		855000 895000 950000 990000>,
++
++		/* Speed bin 6 */
++		<605000  685000 735000 775000 815000
++		855000 895000>,
++
++		/* Speed bin 7 */
++		<605000  685000 735000 775000 815000
++		855000 895000 950000 990000>;
++
++	qcom,cpr-voltage-floor =
++		/* Speed bin 0 */
++		<500000  500000 500000 500000 500000
++		 500000  500000 500000 500000>,
++
++		/* Speed bin 2 */
++		<500000  500000 500000 500000 500000
++		 500000  500000 500000 500000>,
++
++		/* Speed bin 6 */
++		<500000  500000 500000 500000 500000
++		 500000  500000>,
++
++		/* Speed bin 7 */
++		<500000  500000 500000 500000 500000
++		 500000  500000 500000 500000>;
++
++	qcom,cpr-floor-to-ceiling-max-range =
++		/* Speed bin 0; CPR rev 0..7 */
++		<    0     0     0     0     0
++		     0     0     0     0>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++
++		/* Speed bin 2; CPR rev 0..7 */
++		<    0     0     0     0     0
++		     0     0     0     0>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++
++		/* Speed bin 6; CPR rev 0..7 */
++		<    0     0     0     0     0
++		     0     0>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000>,
++
++		/* Speed bin 7; CPR rev 0..7 */
++		<    0     0     0     0     0
++		     0     0     0     0>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>,
++		<50000 50000 50000 50000 50000
++		 50000 50000 50000 50000>;
++
++	qcom,cpr-misc-fuse-voltage-adjustment =
++		/* Speed bin 0; misc fuse 0..1 */
++		<    0     0     0     0      0
++		     0     0     0     0>,
++		<    0     0 30000     0      0
++		     0     0     0     0>,
++
++		/* Speed bin 2; misc fuse 0..1 */
++		<    0     0     0     0      0
++		     0     0     0     0>,
++		<    0     0 30000     0      0
++		     0     0     0     0>,
++
++		/* Speed bin 6; misc fuse 0..1 */
++		<    0     0     0     0      0
++		     0     0>,
++		<    0     0 30000     0      0
++		     0     0>,
++
++		/* Speed bin 7; misc fuse 0..1 */
++		<    0     0     0     0      0
++		     0     0     0     0>,
++		<    0     0 30000     0      0
++		     0     0     0     0>;
++
++	qcom,mem-acc-voltage =
++		/* Speed bin 0 */
++		<1 1 2 2 2 2 2 2 2>,
++
++		/* Speed bin 2 */
++		<1 1 2 2 2 2 2 2 2>,
++
++		/* Speed bin 6 */
++		<1 1 2 2 2 2 2>,
++
++		/* Speed bin 7 */
++		<1 1 2 2 2 2 2 2 2>;
++
++	qcom,corner-frequencies =
++		/* Speed bin 0 */
++		<652800000 1036800000 1401600000
++		1689600000 1804800000 1958400000
++		2016000000 2150400000 2208000000>,
++
++		/* Speed bin 2 */
++		<652800000 1036800000 1401600000
++		1689600000 1804800000 1958400000
++		2016000000 2150400000 2208000000>,
++
++		/* Speed bin 6 */
++		<652800000 1036800000 1401600000
++		1689600000 1804800000 1958400000
++		2016000000>,
++
++		/* Speed bin 7 */
++		<652800000 1036800000 1401600000
++		1689600000 1804800000 1958400000
++		2016000000 2150400000 2208000000>;
++};
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/daisy.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/daisy.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/daisy.dtsi	2023-11-07 10:14:00.517930174 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/daisy.dtsi	2023-11-07 10:11:48.349014626 +0800
+@@ -12,3 +12,6 @@
+  */
+ 
+ #include "sakura/daisy.dtsi"
++#include "msm8953-oc-cpu.dtsi"
++#include "msm8953-oc-regulator.dtsi"
++#include "msm8953-oc-gpu.dtsi"
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/sakura.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/sakura.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/sakura.dtsi	2023-11-07 10:14:00.517930174 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/sakura.dtsi	2023-11-07 10:11:52.513168077 +0800
+@@ -12,3 +12,6 @@
+  */
+ 
+ #include "sakura/sakura.dtsi"
++#include "msm8953-oc-cpu.dtsi"
++#include "msm8953-oc-regulator.dtsi"
++#include "msm8953-oc-gpu.dtsi"
+diff -ruN android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/ysl.dtsi android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/ysl.dtsi
+--- android_kernel_xiaomi_msm8953_orig/arch/arm64/boot/dts/qcom/xiaomi/ysl.dtsi	2023-11-07 10:14:00.521930324 +0800
++++ android_kernel_xiaomi_msm8953/arch/arm64/boot/dts/qcom/xiaomi/ysl.dtsi	2023-11-07 10:11:59.953442509 +0800
+@@ -12,3 +12,6 @@
+  */
+ 
+ #include "ysl/msm8953-pmi8940-mtp-ysl-overlay.dtsi"
++#include "msm8953-oc-cpu.dtsi"
++#include "msm8953-oc-regulator.dtsi"
++#include "msm8953-oc-gpu.dtsi"
+diff -ruN android_kernel_xiaomi_msm8953_orig/drivers/clk/msm/clock-gcc-8953.c android_kernel_xiaomi_msm8953/drivers/clk/msm/clock-gcc-8953.c
+--- android_kernel_xiaomi_msm8953_orig/drivers/clk/msm/clock-gcc-8953.c	2023-11-01 11:31:30.945461323 +0800
++++ android_kernel_xiaomi_msm8953/drivers/clk/msm/clock-gcc-8953.c	2023-11-01 11:33:53.179410435 +0800
+@@ -388,7 +388,8 @@
+ 	F_MM( 510000000,    1020000000,               gpll3,    1,    0,     0),
+ 	F_MM( 560000000,    1120000000,               gpll3,    1,    0,     0),
+ 	F_MM( 650000000,    1300000000,               gpll3,    1,    0,     0),
+-
++	F_MM( 700000000,    1400000000,               gpll3,    1,    0,     0),
++	F_MM( 725000000,    1450000000,               gpll3,    1,    0,     0),
+ 	F_END
+ };
+ 
+--- a/arch/arm64/boot/dts/qcom/msm8953-regulator.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8953-regulator.dtsi
+@@ -28,6 +28,12 @@
+ 
+ 	/* PM8953 S2 - VDD_CX supply */
+ 	rpm-regulator-smpa2 {
++		qcom,gx-retention; //Enable regulator retention level for IDLE modes
++		qcom,soft-start-enable = <0x1>; //enable soft start to start without current peaks that can damage device
++		qcom,hpm-enable = <0x1>; //enable high power mode
++		qcom,boost-current-limit = <14>; //3200mA maximum
++		qcom,ocp-enable = <1>; //enables over current protection
++		qcom,init-quiet-mode = <2>; //Regulator EMI noise reduction
+ 		status = "okay";
+ 		pm8953_s2_level: regulator-s2-level {
+ 			compatible = "qcom,rpm-smd-regulator";
+@@ -87,6 +93,7 @@
+ 		pm8953_s4: regulator-s4 {
+ 			regulator-min-microvolt = <1900000>;
+ 			regulator-max-microvolt = <2050000>;
++			qcom,init-quiet-mode = <2>; //Regulator EMI noise reduction
+ 			qcom,init-voltage = <1900000>;
+ 			status = "okay";
+ 		};
+@@ -297,7 +297,7 @@
+ 	rpm-regulator-ldoa22 {
+ 		status = "okay";
+ 		pm8953_l22: regulator-l22 {
+-			regulator-min-microvolt = <2800000>;
++			regulator-min-microvolt = <2650000>;
+ 			regulator-max-microvolt = <2850000>;
+ 			qcom,init-voltage = <2800000>;
+ 			status = "okay";
+@@ -321,6 +328,7 @@
+ 		pm8953_s5: spm-regulator@2000 {
+ 			compatible = "qcom,spm-regulator";
+ 			reg = <0x2000 0x100>;
++			qcom,init-quiet-mode = <2>; //Regulator EMI noise reduction
+ 			regulator-name = "pm8953_s5";
+ 			regulator-min-microvolt = <400000>;
+ 			regulator-max-microvolt = <1140000>;
+

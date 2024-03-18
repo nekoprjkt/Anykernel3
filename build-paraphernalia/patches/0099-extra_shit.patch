@@ -1,0 +1,111 @@
+--- android_kernel_xiaomi_msm8953_b/scripts/Makefile.lib	2023-11-14 11:16:44.026857646 +0800
++++ android_kernel_xiaomi_msm8953_a/scripts/Makefile.lib	2023-11-14 11:16:53.835169118 +0800
+@@ -271,7 +271,7 @@
+ # ---------------------------------------------------------------------------
+ 
+ quiet_cmd_gzip = GZIP    $@
+-cmd_gzip = (cat $(filter-out FORCE,$^) | gzip -n -f -9 > $@) || \
++cmd_gzip = (cat $(filter-out FORCE,$^) | gzip -n -f -9 > $@) || \
+ 	(rm -f $@ ; false)
+ 
+ # DTC
+--- android_kernel_xiaomi_msm8953_b/scripts/mkcompile_h	2023-10-16 18:03:53.584522000 +0800
++++ android_kernel_xiaomi_msm8953_a/scripts/mkcompile_h	2023-10-16 19:09:35.768852640 +0800
+@@ -76,7 +76,12 @@
+   echo \#define LINUX_COMPILE_BY \"`echo $LINUX_COMPILE_BY | $UTS_TRUNCATE`\"
+   echo \#define LINUX_COMPILE_HOST \"`echo $LINUX_COMPILE_HOST | $UTS_TRUNCATE`\"
+ 
+-  echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | grep ' version ' | sed 's/[[:space:]]*$//'`\"
++  CC_VERSION=$($CC -v 2>&1 | grep ' version ' | sed 's/[[:space:]]*$//' | cut -f1-4 -d ' ')
++  
++  LD_VERSION=$($LD -v | head -n1 | sed 's/(compatible with [^)]*)//' \
++		      | sed 's/[[:space:]]*$//' | cut -f1,2,5 -d ' ' )
++		      
++  printf '#define LINUX_COMPILER "%s"\n' "$KBUILD_BUILD_FEATURES $CC_VERSION, $LD_VERSION" 
+ ) > .tmpcompile
+ 
+ # Only replace the real compile.h if the new one is different,
+
+--- android_kernel_xiaomi_msm8953_b/scripts/setlocalversion	2023-10-17 07:04:39.273647630 +0800
++++ android_kernel_xiaomi_msm8953_a/scripts/setlocalversion	2023-10-17 07:05:06.446743925 +0800
+@@ -179,15 +179,15 @@
+ if test "$CONFIG_LOCALVERSION_AUTO" = "y"; then
+ 	# full scm version string
+ 	res="$res$(scm_version)"
+-else
++#else
+ 	# append a plus sign if the repository is not in a clean
+ 	# annotated or signed tagged state (as git describe only
+ 	# looks at signed or annotated tags - git tag -a/-s) and
+ 	# LOCALVERSION= is not specified
+-	if test "${LOCALVERSION+set}" != "set"; then
+-		scm=$(scm_version --short)
+-		res="$res${scm:++}"
+-	fi
++#	if test "${LOCALVERSION+set}" != "set"; then
++#		scm=$(scm_version --short)
++#		res="$res${scm:++}"
++#	fi
+ fi
+ 
+ echo "$res"
+--- msm8953_orig/Makefile	2023-11-11 17:56:06.023728921 +0800
++++ msm8953/Makefile	2023-11-11 18:13:37.149913045 +0800
+@@ -309,8 +309,8 @@
+ HOSTCXX      = g++
+ endif
+ 
+-HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer -std=gnu89
+-HOSTCXXFLAGS = -O2
++HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer -std=gnu89 -pipe -O3 -funswitch-loops -funroll-all-loops -fpeel-loops -fsplit-loops -fversion-loops-for-strides -fsection-anchors -ftracer -Wno-error
++HOSTCXXFLAGS = -pipe -O3 -funswitch-loops -funroll-all-loops -fpeel-loops -fsplit-loops -fversion-loops-for-strides -fsection-anchors -ftracer -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -Wno-error 
+ 
+ ifeq ($(shell $(HOSTCC) -v 2>&1 | grep -c "clang version"), 1)
+ HOSTCFLAGS  += -Wno-unused-value -Wno-unused-parameter \
+@@ -750,9 +750,9 @@
+ endif
+ 
+ ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
+-KBUILD_CFLAGS   += -Os
++KBUILD_CFLAGS   += -pipe -O3 -funswitch-loops -funroll-all-loops -fpeel-loops -fsplit-loops -fversion-loops-for-strides -fsection-anchors -ftracer -mno-fix-cortex-a53-835769 -mno-fix-cortex-a53-843419 -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -Wno-error -fno-plt
+ else
+-KBUILD_CFLAGS   += -O2
++KBUILD_CFLAGS   += -pipe -O3 -funswitch-loops -funroll-all-loops -fpeel-loops -fsplit-loops -fversion-loops-for-strides -fsection-anchors -ftracer -mno-fix-cortex-a53-835769 -mno-fix-cortex-a53-843419 -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -Wno-error -fno-plt
+ endif
+ 
+ ifdef CONFIG_CC_WERROR
+--- msm8953_orig/arch/arm64/Makefile	2023-11-11 17:56:06.187733269 +0800
++++ msm8953/arch/arm64/Makefile	2023-11-11 18:15:17.162140303 +0800
+@@ -104,6 +104,11 @@
+ 
+ CHECKFLAGS	+= -D__aarch64__
+ 
++KBUILD_CFLAGS   += -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -mno-fix-cortex-a53-835769 -mno-fix-cortex-a53-843419
++KBUILD_AFLAGS	+= -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -mno-fix-cortex-a53-835769 -mno-fix-cortex-a53-843419
++#LDFLAGS	+= --no-fix-cortex-a53-843419
++
++
+ ifeq ($(CONFIG_ARM64_MODULE_CMODEL_LARGE), y)
+ KBUILD_CFLAGS_MODULE	+= -mcmodel=large
+ ifeq ($(CONFIG_LTO_CLANG), y)
+--- msm8953_orig/arch/arm64/crypto/Makefile	2023-11-11 17:56:06.219734119 +0800
++++ msm8953/arch/arm64/crypto/Makefile	2023-11-11 17:45:50.331113481 +0800
+@@ -29,14 +29,14 @@
+ obj-$(CONFIG_CRYPTO_AES_ARM64_NEON_BLK) += aes-neon-blk.o
+ aes-neon-blk-y := aes-glue-neon.o aes-neon.o
+ 
+-AFLAGS_aes-ce.o		:= -DINTERLEAVE=4
+-AFLAGS_aes-neon.o	:= -DINTERLEAVE=4
++AFLAGS_aes-ce.o		:= -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -DINTERLEAVE=4
++AFLAGS_aes-neon.o	:= -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -DINTERLEAVE=4
+ 
+-CFLAGS_aes-glue-ce.o	:= -DUSE_V8_CRYPTO_EXTENSIONS
++CFLAGS_aes-glue-ce.o	:= -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto -DUSE_V8_CRYPTO_EXTENSIONS
+ 
+ obj-$(CONFIG_CRYPTO_CRC32_ARM64) += crc32-arm64.o
+ 
+-CFLAGS_crc32-arm64.o	:= -mcpu=generic+crc
++CFLAGS_crc32-arm64.o	:= -march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto
+ 
+ $(obj)/aes-glue-%.o: $(src)/aes-glue.c FORCE
+ 	$(call if_changed_rule,cc_o_c)

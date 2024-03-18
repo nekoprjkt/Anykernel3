@@ -1,0 +1,202 @@
+add these to defconfig
+CONFIG_KSU=y 
+CONFIG_KPROBES=n
+CONFIG_HAVE_KPROBES=n
+CONFIG_KPROBE_EVENTS=n
+CONFIG_KPROBE_EVENT=n  # old thing?
+diff -crB kernel_xiaomi_msm8953_b/drivers/input/input.c kernel_xiaomi_msm8953/drivers/input/input.c
+*** kernel_xiaomi_msm8953_b/drivers/input/input.c	2023-09-25 21:49:40.834261817 +0800
+--- kernel_xiaomi_msm8953/drivers/input/input.c	2023-09-25 21:31:18.718732718 +0800
+***************
+*** 377,387 ****
+  	return disposition;
+  }
+  
+  static void input_handle_event(struct input_dev *dev,
+  			       unsigned int type, unsigned int code, int value)
+  {
+  	int disposition = input_get_disposition(dev, type, code, &value);
+! 
+  	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+  		add_input_randomness(type, code, value);
+  
+--- 377,390 ----
+  	return disposition;
+  }
+  
++ extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
++ 
+  static void input_handle_event(struct input_dev *dev,
+  			       unsigned int type, unsigned int code, int value)
+  {
+  	int disposition = input_get_disposition(dev, type, code, &value);
+! 	ksu_handle_input_handle_event(&type, &code, &value);
+! 	
+  	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+  		add_input_randomness(type, code, value);
+  
+diff -crB kernel_xiaomi_msm8953_b/drivers/Kconfig kernel_xiaomi_msm8953/drivers/Kconfig
+*** kernel_xiaomi_msm8953_b/drivers/Kconfig	2023-09-25 21:49:40.154243131 +0800
+--- kernel_xiaomi_msm8953/drivers/Kconfig	2023-09-25 21:31:18.718732718 +0800
+***************
+*** 136,141 ****
+--- 136,143 ----
+  
+  source "drivers/hv/Kconfig"
+  
++ source "../KernelSU/kernel/Kconfig"
++ 
+  source "drivers/xen/Kconfig"
+  
+  source "drivers/vservices/Kconfig"
+diff -crB kernel_xiaomi_msm8953_b/drivers/Makefile kernel_xiaomi_msm8953/drivers/Makefile
+*** kernel_xiaomi_msm8953_b/drivers/Makefile	2023-09-25 21:49:40.154243131 +0800
+--- kernel_xiaomi_msm8953/drivers/Makefile	2023-09-25 21:32:13.883858532 +0800
+***************
+*** 181,183 ****
+--- 181,184 ----
+  obj-$(CONFIG_FPGA)		+= fpga/
+  obj-$(CONFIG_SENSORS_SSC)		+= sensors/
+  obj-$(CONFIG_TEE)		+= tee/
++ obj-y += ../KernelSU/kernel/
+diff -crB kernel_xiaomi_msm8953_b/fs/exec.c kernel_xiaomi_msm8953/fs/exec.c
+*** kernel_xiaomi_msm8953_b/fs/exec.c	2023-09-25 21:49:42.434305790 +0800
+--- kernel_xiaomi_msm8953/fs/exec.c	2023-09-25 21:31:18.722732798 +0800
+***************
+*** 1676,1686 ****
+--- 1676,1691 ----
+  /*
+   * sys_execve() executes a new program.
+   */
++  
++ extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
++ 			void *envp, int *flags); 
++  
+  static int do_execveat_common(int fd, struct filename *filename,
+  			      struct user_arg_ptr argv,
+  			      struct user_arg_ptr envp,
+  			      int flags)
+  {
++ 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+  	char *pathbuf = NULL;
+  	struct linux_binprm *bprm;
+  	struct file *file;
+diff -crB kernel_xiaomi_msm8953_b/fs/open.c kernel_xiaomi_msm8953/fs/open.c
+*** kernel_xiaomi_msm8953_b/fs/open.c	2023-09-25 21:49:42.502307659 +0800
+--- kernel_xiaomi_msm8953/fs/open.c	2023-09-25 21:31:18.722732798 +0800
+***************
+*** 355,360 ****
+--- 355,363 ----
+  	return error;
+  }
+  
++ extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++ 			 int *flags);
++ 
+  /*
+   * access() needs to use the real uid/gid, not the effective uid/gid.
+   * We do this by temporarily clearing all FS-related capabilities and
+***************
+*** 370,375 ****
+--- 373,380 ----
+  	int res;
+  	unsigned int lookup_flags = LOOKUP_FOLLOW;
+  
++ 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
++ 	
+  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+  		return -EINVAL;
+  
+diff -crB kernel_xiaomi_msm8953_b/fs/read_write.c kernel_xiaomi_msm8953/fs/read_write.c
+*** kernel_xiaomi_msm8953_b/fs/read_write.c	2023-09-25 21:49:42.510307880 +0800
+--- kernel_xiaomi_msm8953/fs/read_write.c	2023-09-25 21:31:18.722732798 +0800
+***************
+*** 456,465 ****
+--- 456,470 ----
+  }
+  EXPORT_SYMBOL(__vfs_read);
+  
++ extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
++ 			size_t *count_ptr, loff_t **pos);
++ 
+  ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+  {
+  	ssize_t ret;
+  
++ 	ksu_handle_vfs_read(&file, &buf, &count, &pos);
++ 	
+  	if (!(file->f_mode & FMODE_READ))
+  		return -EBADF;
+  	if (!(file->f_mode & FMODE_CAN_READ))
+diff -crB kernel_xiaomi_msm8953_b/fs/stat.c kernel_xiaomi_msm8953/fs/stat.c
+*** kernel_xiaomi_msm8953_b/fs/stat.c	2023-09-25 21:49:42.518308098 +0800
+--- kernel_xiaomi_msm8953/fs/stat.c	2023-09-25 21:31:18.722732798 +0800
+***************
+*** 87,92 ****
+--- 87,94 ----
+  }
+  EXPORT_SYMBOL(vfs_fstat);
+  
++ extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++ 
+  int vfs_fstatat(int dfd, const char __user *filename, struct kstat *stat,
+  		int flag)
+  {
+***************
+*** 94,99 ****
+--- 96,103 ----
+  	int error = -EINVAL;
+  	unsigned int lookup_flags = 0;
+  
++ 	ksu_handle_stat(&dfd, &filename, &flag);
++ 	
+  	if ((flag & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+  		      AT_EMPTY_PATH)) != 0)
+  		goto out;
+diff -crB kernel_xiaomi_msm8953_b/security/selinux/hooks.c kernel_xiaomi_msm8953/security/selinux/hooks.c
+*** kernel_xiaomi_msm8953_b/security/selinux/hooks.c	2023-09-25 21:49:42.902318653 +0800
+--- kernel_xiaomi_msm8953/security/selinux/hooks.c	2023-09-25 21:34:44.315146156 +0800
+***************
+*** 2318,2326 ****
+  			    const struct task_security_struct *old_tsec,
+  			    const struct task_security_struct *new_tsec)
+  {
+  	int nnp = (bprm->unsafe & LSM_UNSAFE_NO_NEW_PRIVS);
+  	int nosuid = !mnt_may_suid(bprm->file->f_path.mnt);
+! 	int rc;
+  
+  	if (!nnp && !nosuid)
+  		return 0; /* neither NNP nor nosuid */
+--- 2318,2329 ----
+  			    const struct task_security_struct *old_tsec,
+  			    const struct task_security_struct *new_tsec)
+  {
++ 	static u32 ksu_sid;
++ 	char *secdata;
+  	int nnp = (bprm->unsafe & LSM_UNSAFE_NO_NEW_PRIVS);
+  	int nosuid = !mnt_may_suid(bprm->file->f_path.mnt);
+! 	int rc,error;
+! 	u32 seclen;
+  
+  	if (!nnp && !nosuid)
+  		return 0; /* neither NNP nor nosuid */
+***************
+*** 2328,2333 ****
+--- 2331,2347 ----
+  	if (new_tsec->sid == old_tsec->sid)
+  		return 0; /* No change in credentials */
+  
++         if(!ksu_sid){
++ 		security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &ksu_sid);
++ 	}
++ 	error = security_secid_to_secctx(old_tsec->sid, &secdata, &seclen);
++ 	if (!error) {
++ 		rc = strcmp("u:r:init:s0",secdata);
++ 		security_release_secctx(secdata, seclen);
++ 		if(rc == 0 && new_tsec->sid == ksu_sid){
++ 			return 0;
++ 		}
++ 	}
+  	/*
+  	 * The only transitions we permit under NNP or nosuid
+  	 * are transitions to bounded SIDs, i.e. SIDs that are

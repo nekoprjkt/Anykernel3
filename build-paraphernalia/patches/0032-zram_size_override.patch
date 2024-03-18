@@ -1,0 +1,51 @@
+From 6a50d112bb0b139539d1a8ac6d169299448dc9be Mon Sep 17 00:00:00 2001
+From: onettboots <blackcocopet@gmail.com>
+Date: Tue, 19 Jul 2022 11:37:08 +0700
+Subject: [PATCH] zram_drv: allow overriding zram size from kernel Add a
+ CONFIG_ZRAM_SIZE_OVERRIDE option, size will be set to 2 GB default multiply
+ by CONFIG_ZRAM_SIZE_OVERRIDE.
+
+Signed-off-by: Dmitry Eliseev <dmitry.e@cloudberrylab.com>
+Signed-off-by: Yaroslav Furman <yaro330@gmail.com>
+Signed-off-by: UtsavBalar1231 <utsavbalar1231@gmail.com>
+Signed-off-by: shandongtlb <40312509+shandongtlb@users.noreply.github.com>
+Signed-off-by: Carlos Ayrton Lopez Arroyo <15030201@itcelaya.edu.mx>
+Signed-off-by: onettboots <blackcocopet@gmail.com>
+---
+ drivers/block/zram/Kconfig    | 5 +++++
+ drivers/block/zram/zram_drv.c | 5 +++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/drivers/block/zram/Kconfig b/drivers/block/zram/Kconfig
+index ffd92b17788c..e1e87242077e 100644
+--- a/drivers/block/zram/Kconfig
++++ b/drivers/block/zram/Kconfig
+@@ -70,3 +70,8 @@
+ 	help
+ 	  Pages with entropy above ZRAM_ENTROPY_THRESHOLD will be stored
+ 	  uncompressed. The default value was chosen as a 
++
++config ZRAM_SIZE_OVERRIDE
++	int "zram size to set from kernel"
++	range 1 16
++	default 4
+
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 7e68a5bed27f..34de694b511b 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1727,9 +1727,14 @@ static ssize_t disksize_store(struct device *dev,
+ 	struct zram *zram = dev_to_zram(dev);
+ 	int err;
+ 
++#ifndef CONFIG_ZRAM_SIZE_OVERRIDE
+ 	disksize = memparse(buf, NULL);
+ 	if (!disksize)
+ 		return -EINVAL;
++#else
++	disksize = (u64)SZ_1G * CONFIG_ZRAM_SIZE_OVERRIDE;
++	pr_info("Overriding zram size to %li", disksize);
++#endif
+ 
+ 	down_write(&zram->init_lock);
+ 	if (init_done(zram)) {

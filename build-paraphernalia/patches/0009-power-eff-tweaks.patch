@@ -1,0 +1,725 @@
+From 69a5053528e722f82cd3704e4aaac9bba7be671c Mon Sep 17 00:00:00 2001
+From: Leo Yan <leo.yan@linaro.org>
+Date: Wed, 3 Jan 2018 17:24:16 +0800
+Subject: [PATCH] thermal: Use power efficient workqueue
+
+Thermal core framework uses the system_freezable_wq workqueue as its
+workqueue for polling temperature. Using system_freezable_wq workqueue
+prevents the scheduler to make smart decision about the best place to
+schedule the work.
+
+This commit replaces system_freezable_wq with
+system_freezable_power_efficient_wq. With kernel configuration
+CONFIG_WQ_POWER_EFFICIENT is enabled, the work can be scheduled on the
+best CPU from a power or a performance point of view.
+
+This commit is inspired by Vincent Guittot patch "netfilter: conntrack:
+use power efficient workqueue" and verified on 96boards Hikey960.
+
+Cc: Eduardo Valentin <edubezval@gmail.com>
+Cc: Zhang Rui <rui.zhang@intel.com>
+Cc: Daniel Lezcano <daniel.lezcano@linaro.org>
+Cc: Vincent Guittot <vincent.guittot@linaro.org>
+Signed-off-by: Leo Yan <leo.yan@linaro.org>
+Acked-by: Vincent Guittot <vincent.guittot@linaro.org>
+Signed-off-by: Raphiel Rollerscaperers <raphielscape@outlook.com>
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ drivers/thermal/thermal_core.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/thermal/thermal_core.c b/drivers/thermal/thermal_core.c
+index 47517a0db3b3..946c47f23f46 100755
+--- a/drivers/thermal/thermal_core.c
++++ b/drivers/thermal/thermal_core.c
+@@ -406,11 +406,12 @@ static void thermal_zone_device_set_polling(struct workqueue_struct *queue,
+ 					    int delay)
+ {
+ 	if (delay > 1000)
+-		mod_delayed_work(queue, &tz->poll_queue,
++		mod_delayed_work(system_freezable_power_efficient_wq,
++				 &tz->poll_queue,
+ 				 round_jiffies(msecs_to_jiffies(delay)));
+ 	else if (delay)
+-		mod_delayed_work(queue, &tz->poll_queue,
+-				 msecs_to_jiffies(delay));
++		mod_delayed_work(system_freezable_power_efficient_wq,
++				 &tz->poll_queue, msecs_to_jiffies(delay));
+ 	else
+ 		cancel_delayed_work(&tz->poll_queue);
+ }
+From 10784dce993a1b6a56b8a66af7b1441f3bd7493c Mon Sep 17 00:00:00 2001
+From: freak07 <michalechner92@googlemail.com>
+Date: Fri, 19 Jul 2019 10:45:51 +0200
+Subject: [PATCH] platform: ipa: use power efficient workingqueues
+
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ drivers/platform/msm/ipa/ipa_clients/rndis_ipa.c | 2 +-
+ drivers/platform/msm/ipa/ipa_rm.c                | 2 +-
+ drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c      | 6 ++++--
+ 3 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_clients/rndis_ipa.c b/drivers/platform/msm/ipa/ipa_clients/rndis_ipa.c
+index 286e90e91e8b..dc0396bb13ed 100644
+--- a/drivers/platform/msm/ipa/ipa_clients/rndis_ipa.c
++++ b/drivers/platform/msm/ipa/ipa_clients/rndis_ipa.c
+@@ -1503,7 +1503,7 @@ static void rndis_ipa_xmit_error(struct sk_buff *skb)
+ 	delay_jiffies = msecs_to_jiffies(
+ 		rndis_ipa_ctx->error_msec_sleep_time + rand_dealy_msec);
+ 
+-	retval = schedule_delayed_work(
++	retval = queue_delayed_work(system_power_efficient_wq, 
+ 		&rndis_ipa_ctx->xmit_error_delayed_work, delay_jiffies);
+ 	if (!retval) {
+ 		RNDIS_IPA_ERROR("fail to schedule delayed work\n");
+diff --git a/drivers/platform/msm/ipa/ipa_rm.c b/drivers/platform/msm/ipa/ipa_rm.c
+index 914028c244b2..68658eb826f4 100644
+--- a/drivers/platform/msm/ipa/ipa_rm.c
++++ b/drivers/platform/msm/ipa/ipa_rm.c
+@@ -512,7 +512,7 @@ int ipa_rm_request_resource_with_timer(enum ipa_rm_resource_name resource_name)
+ 	release_work->needed_bw = 0;
+ 	release_work->dec_usage_count = false;
+ 	INIT_DELAYED_WORK(&release_work->work, delayed_release_work_func);
+-	schedule_delayed_work(&release_work->work,
++	queue_delayed_work(system_power_efficient_wq, &release_work->work,
+ 			msecs_to_jiffies(IPA_RM_RELEASE_DELAY_IN_MSEC));
+ 	result = 0;
+ bail:
+diff --git a/drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c b/drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c
+index 17f22f189fa7..6fae7aac2d1a 100644
+--- a/drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c
++++ b/drivers/platform/msm/ipa/ipa_v3/rmnet_ipa.c
+@@ -2852,7 +2852,8 @@ static void tethering_stats_poll_queue(struct work_struct *work)
+ 
+ 	/* Schedule again only if there's an active polling interval */
+ 	if (ipa3_rmnet_ctx.polling_interval != 0)
+-		schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work,
++		queue_delayed_work(system_power_efficient_wq, 
++			&ipa_tether_stats_poll_wakequeue_work,
+ 			msecs_to_jiffies(ipa3_rmnet_ctx.polling_interval*1000));
+ }
+ 
+@@ -2946,7 +2947,8 @@ int rmnet_ipa3_poll_tethering_stats(struct wan_ioctl_poll_tethering_stats *data)
+ 		return 0;
+ 	}
+ 
+-	schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work, 0);
++	queue_delayed_work(system_power_efficient_wq, 
++						&ipa_tether_stats_poll_wakequeue_work, 0);
+ 	return 0;
+ }
+ 
+From e4b8ec4f5a54a96af684720bdd6c0c7d410d7f5b Mon Sep 17 00:00:00 2001
+From: Viresh Kumar <viresh.kumar@linaro.org>
+Date: Wed, 24 Apr 2013 17:12:56 +0530
+Subject: [PATCH] block: queue work on power efficient wq
+
+Block layer uses workqueues for multiple purposes. There is no real dependency
+of scheduling these on the cpu which scheduled them.
+
+On a idle system, it is observed that and idle cpu wakes up many times just to
+service this work. It would be better if we can schedule it on a cpu which the
+scheduler believes to be the most appropriate one.
+
+This patch replaces normal workqueues with power efficient versions.
+
+Cc: Jens Axboe <axboe@kernel.dk>
+Signed-off-by: Viresh Kumar <viresh.kumar@linaro.org>
+Signed-off-by: Tejun Heo <tj@kernel.org>
+Signed-off-by: Davide Garberi <dade.garberi@gmail.com>
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ block/blk-core.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/block/blk-core.c b/block/blk-core.c
+index 5908c93d8fb6..b542b0b655fb 100644
+--- a/block/blk-core.c
++++ b/block/blk-core.c
+@@ -3595,7 +3595,8 @@ int __init blk_dev_init(void)
+ 
+ 	/* used for unplugging and affects IO latency/throughput - HIGHPRI */
+ 	kblockd_workqueue = alloc_workqueue("kblockd",
+-					    WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
++					    WQ_MEM_RECLAIM | WQ_HIGHPRI |
++					    WQ_POWER_EFFICIENT, 0);
+ 	if (!kblockd_workqueue)
+ 		panic("Failed to create kblockd\n");
+ 
+From ce6495b5962c3e8ad4a83d4e4853c4326a749a7e Mon Sep 17 00:00:00 2001
+From: freak07 <michalechner92@googlemail.com>
+Date: Wed, 20 Feb 2019 10:22:43 +0100
+Subject: [PATCH] techpack: use power efficient workingqueues
+
+(cherry picked from commit 75ed04dc1f7e7da565e41b7190fb44f078c5b4d6)
+(cherry picked from commit a23fc1d9e2a6166dde561c6e5cf8f1e09e0a5c0c)
+(cherry picked from commit efed5ad0c48e83e66b4be7f33147aa192e47e498)
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ techpack/audio/asoc/codecs/msm_sdw/msm_sdw_cdc.c        | 4 ++--
+ techpack/audio/asoc/codecs/sdm660_cdc/msm-digital-cdc.c | 6 +++---
+ techpack/audio/asoc/codecs/wcd-mbhc-v2.c                | 4 ++--
+ techpack/audio/asoc/codecs/wcd-spi.c                    | 2 +-
+ techpack/audio/asoc/codecs/wcd9335.c                    | 8 ++++----
+ techpack/audio/asoc/codecs/wcd934x/wcd934x.c            | 8 ++++----
+ techpack/audio/asoc/codecs/wsa881x.c                    | 4 ++--
+ techpack/audio/dsp/avtimer.c                            | 4 ++--
+ 8 files changed, 20 insertions(+), 20 deletions(-)
+
+diff --git a/techpack/audio/asoc/codecs/msm_sdw/msm_sdw_cdc.c b/techpack/audio/asoc/codecs/msm_sdw/msm_sdw_cdc.c
+index 498dfbfe9ed4..6a09ac2065a8 100644
+--- a/techpack/audio/asoc/codecs/msm_sdw/msm_sdw_cdc.c
++++ b/techpack/audio/asoc/codecs/msm_sdw/msm_sdw_cdc.c
+@@ -376,7 +376,7 @@ static int __msm_sdw_reg_read(struct msm_sdw_priv *msm_sdw, unsigned short reg,
+ 			((u8 *)dest)[i] = temp;
+ 		}
+ 		msm_sdw->int_mclk1_enabled = true;
+-		schedule_delayed_work(&msm_sdw->disable_int_mclk1_work, 50);
++		queue_delayed_work(system_power_efficient_wq, &msm_sdw->disable_int_mclk1_work, 50);
+ 		goto unlock_exit;
+ 	}
+ 	for (i = 0; i < bytes; i++)  {
+@@ -419,7 +419,7 @@ static int __msm_sdw_reg_write(struct msm_sdw_priv *msm_sdw, unsigned short reg,
+ 			ret = msm_sdw_ahb_write_device(msm_sdw, reg + (4 * i),
+ 						       &((u8 *)src)[i]);
+ 		msm_sdw->int_mclk1_enabled = true;
+-		schedule_delayed_work(&msm_sdw->disable_int_mclk1_work, 50);
++		queue_delayed_work(system_power_efficient_wq, &msm_sdw->disable_int_mclk1_work, 50);
+ 		goto unlock_exit;
+ 	}
+ 	for (i = 0; i < bytes; i++)
+diff --git a/techpack/audio/asoc/codecs/sdm660_cdc/msm-digital-cdc.c b/techpack/audio/asoc/codecs/sdm660_cdc/msm-digital-cdc.c
+index 61b2ad4dbd8a..d4bd4f219c78 100644
+--- a/techpack/audio/asoc/codecs/sdm660_cdc/msm-digital-cdc.c
++++ b/techpack/audio/asoc/codecs/sdm660_cdc/msm-digital-cdc.c
+@@ -108,7 +108,7 @@ static int msm_digcdc_clock_control(bool flag)
+ 			}
+ 			pr_debug("enabled digital codec core clk\n");
+ 			atomic_set(&pdata->int_mclk0_enabled, true);
+-			schedule_delayed_work(&pdata->disable_int_mclk0_work,
++			queue_delayed_work(system_power_efficient_wq,&pdata->disable_int_mclk0_work,
+ 					      50);
+ 		}
+ 	} else {
+@@ -974,13 +974,13 @@ static int msm_dig_cdc_codec_enable_dec(struct snd_soc_dapm_widget *w,
+ 		/* enable HPF */
+ 		snd_soc_update_bits(codec, tx_mux_ctl_reg, 0x08, 0x00);
+ 
+-		schedule_delayed_work(
++		queue_delayed_work(system_power_efficient_wq,
+ 			    &msm_dig_cdc->tx_mute_dwork[decimator - 1].dwork,
+ 			    msecs_to_jiffies(tx_unmute_delay));
+ 		if (tx_hpf_work[decimator - 1].tx_hpf_cut_of_freq !=
+ 				CF_MIN_3DB_150HZ) {
+ 
+-			schedule_delayed_work(&tx_hpf_work[decimator - 1].dwork,
++			queue_delayed_work(system_power_efficient_wq, &tx_hpf_work[decimator - 1].dwork,
+ 					msecs_to_jiffies(300));
+ 		}
+ 		/* apply the digital gain after the decimator is enabled*/
+diff --git a/techpack/audio/asoc/codecs/wcd-mbhc-v2.c b/techpack/audio/asoc/codecs/wcd-mbhc-v2.c
+index f93243ba275c..a7e05a1adffb 100644
+--- a/techpack/audio/asoc/codecs/wcd-mbhc-v2.c
++++ b/techpack/audio/asoc/codecs/wcd-mbhc-v2.c
+@@ -1463,7 +1463,7 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
+ 
+ 	mbhc->buttons_pressed |= mask;
+ 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
+-	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
++	if (queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_btn_dwork,
+ 				msecs_to_jiffies(400)) == 0) {
+ 		WARN(1, "Button pressed twice without release event\n");
+ 		mbhc->mbhc_cb->lock_sleep(mbhc, false);
+@@ -2120,7 +2120,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
+ 		rc = wcd_mbhc_initialise(mbhc);
+ 	} else {
+ 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)
+-			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
++			queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_firmware_dwork,
+ 				      usecs_to_jiffies(FW_READ_TIMEOUT));
+ 		else
+ 			pr_err("%s: Skipping to read mbhc fw, 0x%pK %pK\n",
+diff --git a/techpack/audio/asoc/codecs/wcd-spi.c b/techpack/audio/asoc/codecs/wcd-spi.c
+index 20b358e0fd30..74f5f3fbc976 100644
+--- a/techpack/audio/asoc/codecs/wcd-spi.c
++++ b/techpack/audio/asoc/codecs/wcd-spi.c
+@@ -714,7 +714,7 @@ static int wcd_spi_clk_ctrl(struct spi_device *spi,
+ 		 * flags.
+ 		 */
+ 		if (flags == WCD_SPI_CLK_FLAG_DELAYED) {
+-			schedule_delayed_work(&wcd_spi->clk_dwork,
++			queue_delayed_work(system_power_efficient_wq, &wcd_spi->clk_dwork,
+ 				msecs_to_jiffies(WCD_SPI_CLK_OFF_TIMER_MS));
+ 		} else {
+ 			ret = wcd_spi_clk_disable(spi);
+diff --git a/techpack/audio/asoc/codecs/wcd9335.c b/techpack/audio/asoc/codecs/wcd9335.c
+index aec090daa798..deb0dd974433 100644
+--- a/techpack/audio/asoc/codecs/wcd9335.c
++++ b/techpack/audio/asoc/codecs/wcd9335.c
+@@ -4157,7 +4157,7 @@ static int tasha_codec_enable_spk_anc(struct snd_soc_dapm_widget *w,
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
+ 		ret = tasha_codec_enable_anc(w, kcontrol, event);
+-		schedule_delayed_work(&tasha->spk_anc_dwork.dwork,
++		queue_delayed_work(system_power_efficient_wq, &tasha->spk_anc_dwork.dwork,
+ 				      msecs_to_jiffies(spk_anc_en_delay));
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
+@@ -5760,11 +5760,11 @@ static int tasha_codec_enable_dec(struct snd_soc_dapm_widget *w,
+ 			snd_soc_write(codec, WCD9335_MBHC_ZDET_RAMP_CTL, 0x03);
+ 		}
+ 		/* schedule work queue to Remove Mute */
+-		schedule_delayed_work(&tasha->tx_mute_dwork[decimator].dwork,
++		queue_delayed_work(system_power_efficient_wq, &tasha->tx_mute_dwork[decimator].dwork,
+ 				      msecs_to_jiffies(tx_unmute_delay));
+ 		if (tasha->tx_hpf_work[decimator].hpf_cut_off_freq !=
+ 							CF_MIN_3DB_150HZ)
+-			schedule_delayed_work(
++			queue_delayed_work(system_power_efficient_wq, 
+ 					&tasha->tx_hpf_work[decimator].dwork,
+ 					msecs_to_jiffies(300));
+ 		/* apply gain after decimator is enabled */
+@@ -12029,7 +12029,7 @@ static int tasha_dig_core_power_collapse(struct tasha_priv *tasha,
+ 
+ 	if (req_state == POWER_COLLAPSE) {
+ 		if (tasha->power_active_ref == 0) {
+-			schedule_delayed_work(&tasha->power_gate_work,
++			queue_delayed_work(system_power_efficient_wq, &tasha->power_gate_work,
+ 			msecs_to_jiffies(dig_core_collapse_timer * 1000));
+ 		}
+ 	} else if (req_state == POWER_RESUME) {
+diff --git a/techpack/audio/asoc/codecs/wcd934x/wcd934x.c b/techpack/audio/asoc/codecs/wcd934x/wcd934x.c
+index ebd87c6469b9..ced24d5b4008 100644
+--- a/techpack/audio/asoc/codecs/wcd934x/wcd934x.c
++++ b/techpack/audio/asoc/codecs/wcd934x/wcd934x.c
+@@ -2143,7 +2143,7 @@ static int tavil_codec_enable_spkr_anc(struct snd_soc_dapm_widget *w,
+ 	switch (event) {
+ 	case SND_SOC_DAPM_PRE_PMU:
+ 		ret = tavil_codec_enable_anc(w, kcontrol, event);
+-		schedule_delayed_work(&tavil->spk_anc_dwork.dwork,
++		queue_delayed_work(system_power_efficient_wq, &tavil->spk_anc_dwork.dwork,
+ 				      msecs_to_jiffies(spk_anc_en_delay));
+ 		break;
+ 	case SND_SOC_DAPM_POST_PMD:
+@@ -4545,11 +4545,11 @@ static int tavil_codec_enable_dec(struct snd_soc_dapm_widget *w,
+ 			snd_soc_update_bits(codec, hpf_gate_reg, 0x02, 0x00);
+ 		}
+ 		/* schedule work queue to Remove Mute */
+-		schedule_delayed_work(&tavil->tx_mute_dwork[decimator].dwork,
++		queue_delayed_work(system_power_efficient_wq, &tavil->tx_mute_dwork[decimator].dwork,
+ 				      msecs_to_jiffies(tx_unmute_delay));
+ 		if (tavil->tx_hpf_work[decimator].hpf_cut_off_freq !=
+ 							CF_MIN_3DB_150HZ)
+-			schedule_delayed_work(
++			queue_delayed_work(system_power_efficient_wq,
+ 					&tavil->tx_hpf_work[decimator].dwork,
+ 					msecs_to_jiffies(300));
+ 		/* apply gain after decimator is enabled */
+@@ -9100,7 +9100,7 @@ static int tavil_dig_core_power_collapse(struct tavil_priv *tavil,
+ 
+ 	if (req_state == POWER_COLLAPSE) {
+ 		if (tavil->power_active_ref == 0) {
+-			schedule_delayed_work(&tavil->power_gate_work,
++			queue_delayed_work(system_power_efficient_wq, &tavil->power_gate_work,
+ 			msecs_to_jiffies(dig_core_collapse_timer * 1000));
+ 		}
+ 	} else if (req_state == POWER_RESUME) {
+diff --git a/techpack/audio/asoc/codecs/wsa881x.c b/techpack/audio/asoc/codecs/wsa881x.c
+index d2a3938a5a2c..5edbfd5c2d94 100644
+--- a/techpack/audio/asoc/codecs/wsa881x.c
++++ b/techpack/audio/asoc/codecs/wsa881x.c
+@@ -917,7 +917,7 @@ static void wsa881x_ocp_ctl_work(struct work_struct *work)
+ 	else
+ 		snd_soc_update_bits(codec, WSA881X_SPKR_OCP_CTL, 0xC0, 0xC0);
+ 
+-	schedule_delayed_work(&wsa881x->ocp_ctl_work,
++	queue_delayed_work(system_power_efficient_wq, &wsa881x->ocp_ctl_work,
+ 			msecs_to_jiffies(wsa881x_ocp_poll_timer_sec * 1000));
+ }
+ 
+@@ -972,7 +972,7 @@ static int wsa881x_spkr_pa_event(struct snd_soc_dapm_widget *w,
+ 					    0x07, 0x01);
+ 			wsa881x_visense_adc_ctrl(codec, ENABLE);
+ 		}
+-		schedule_delayed_work(&wsa881x->ocp_ctl_work,
++		queue_delayed_work(system_power_efficient_wq, &wsa881x->ocp_ctl_work,
+ 			msecs_to_jiffies(WSA881X_OCP_CTL_TIMER_SEC * 1000));
+ 		/* Force remove group */
+ 		swr_remove_from_group(wsa881x->swr_slave,
+diff --git a/techpack/audio/dsp/avtimer.c b/techpack/audio/dsp/avtimer.c
+index a2e745a53ff6..03e9365b32b4 100644
+--- a/techpack/audio/dsp/avtimer.c
++++ b/techpack/audio/dsp/avtimer.c
+@@ -119,7 +119,7 @@ static int32_t aprv2_core_fn_q(struct apr_client_data *data, void *priv)
+ 		avtimer.core_handle_q = NULL;
+ 		avtimer.avtimer_open_cnt = 0;
+ 		atomic_set(&avtimer.adsp_ready, 0);
+-		schedule_delayed_work(&avtimer.ssr_dwork,
++		queue_delayed_work(system_power_efficient_wq, &avtimer.ssr_dwork,
+ 				  msecs_to_jiffies(SSR_WAKETIME));
+ 		break;
+ 	}
+@@ -293,7 +293,7 @@ static void reset_work(struct work_struct *work)
+ 	}
+ 	pr_debug("%s:Q6 not ready-retry after sometime\n", __func__);
+ 	if (--avtimer.num_retries > 0) {
+-		schedule_delayed_work(&avtimer.ssr_dwork,
++		queue_delayed_work(system_power_efficient_wq, &avtimer.ssr_dwork,
+ 			  msecs_to_jiffies(Q6_READY_RETRY));
+ 	} else {
+ 		pr_err("%s: Q6 failed responding after multiple retries\n",
+From 39fc5131334b17f05ad3481c5fcb40f8f5414e39 Mon Sep 17 00:00:00 2001
+From: freak07 <michalechner92@googlemail.com>
+Date: Fri, 19 Jul 2019 10:46:24 +0200
+Subject: [PATCH] gpu: drm: use power efficient workingqueues
+
+Change-Id: Id6fe0d3ebf7eabb423f2ec64d79075c0e3ba9e14
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ drivers/gpu/drm/drm_probe_helper.c      | 10 ++++++----
+ drivers/gpu/drm/msm/sde/sde_connector.c |  4 ++--
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/drm_probe_helper.c b/drivers/gpu/drm/drm_probe_helper.c
+index b33d39d9dd14..15b62dc87e87 100644
+--- a/drivers/gpu/drm/drm_probe_helper.c
++++ b/drivers/gpu/drm/drm_probe_helper.c
+@@ -158,7 +158,8 @@ void drm_kms_helper_poll_enable_locked(struct drm_device *dev)
+ 	}
+ 
+ 	if (poll)
+-		schedule_delayed_work(&dev->mode_config.output_poll_work, delay);
++		queue_delayed_work(system_power_efficient_wq, 
++				   &dev->mode_config.output_poll_work, delay);
+ }
+ EXPORT_SYMBOL(drm_kms_helper_poll_enable_locked);
+ 
+@@ -273,8 +274,8 @@ int drm_helper_probe_single_connector_modes(struct drm_connector *connector,
+ 		 */
+ 		dev->mode_config.delayed_event = true;
+ 		if (dev->mode_config.poll_enabled)
+-			schedule_delayed_work(&dev->mode_config.output_poll_work,
+-					      0);
++			queue_delayed_work(system_power_efficient_wq, 
++					   &dev->mode_config.output_poll_work, 0);
+ 	}
+ 
+ 	/* Re-enable polling in case the global poll config changed. */
+@@ -460,7 +461,8 @@ static void output_poll_execute(struct work_struct *work)
+ 		drm_kms_helper_hotplug_event(dev);
+ 
+ 	if (repoll)
+-		schedule_delayed_work(delayed_work, DRM_OUTPUT_POLL_PERIOD);
++		queue_delayed_work(system_power_efficient_wq,
++				   delayed_work, DRM_OUTPUT_POLL_PERIOD);
+ }
+ 
+ /**
+diff --git a/drivers/gpu/drm/msm/sde/sde_connector.c b/drivers/gpu/drm/msm/sde/sde_connector.c
+index 05b5f1aa31fc..4238a0667fcb 100644
+--- a/drivers/gpu/drm/msm/sde/sde_connector.c
++++ b/drivers/gpu/drm/msm/sde/sde_connector.c
+@@ -455,7 +455,7 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
+ 				c_conn->esd_status_interval :
+ 					STATUS_CHECK_INTERVAL_MS;
+ 			/* Schedule ESD status check */
+-			schedule_delayed_work(&c_conn->status_work,
++			queue_delayed_work(system_power_efficient_wq, &c_conn->status_work,
+ 				msecs_to_jiffies(interval));
+ 			c_conn->esd_status_check = true;
+ 		} else {
+@@ -1979,7 +1979,7 @@ static void sde_connector_check_status_work(struct work_struct *work)
+ 		/* If debugfs property is not set then take default value */
+ 		interval = conn->esd_status_interval ?
+ 			conn->esd_status_interval : STATUS_CHECK_INTERVAL_MS;
+-		schedule_delayed_work(&conn->status_work,
++		queue_delayed_work(system_power_efficient_wq, &conn->status_work,
+ 			msecs_to_jiffies(interval));
+ 		return;
+ 	}
+From 1e7849ce15a71d7616753b4a757ee84275a69f2b Mon Sep 17 00:00:00 2001
+From: freak07 <michalechner92@googlemail.com>
+Date: Fri, 22 Feb 2019 08:34:46 +0100
+Subject: [PATCH] Add more goodies to PEWQ's
+
+* soc: qcom: glink: use power efficient workqueues
+
+* mm: vmstat: use power efficient workqueues
+
+Change-Id: Ia618f3cbf0cbe55513c89849b5779966758b89c0
+Signed-off-by: Henrique Pereira <hlcpereira@pixelexperience.org>
+---
+ drivers/soc/qcom/glink.c | 2 +-
+ mm/vmstat.c              | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/soc/qcom/glink.c b/drivers/soc/qcom/glink.c
+index c976f1711a37..cf8a096ca1d3 100644
+--- a/drivers/soc/qcom/glink.c
++++ b/drivers/soc/qcom/glink.c
+@@ -5832,7 +5832,7 @@ static void glink_pm_qos_unvote(struct glink_core_xprt_ctx *xprt_ptr)
+ 	xprt_ptr->tx_path_activity = false;
+ 	if (xprt_ptr->qos_req_active) {
+ 		GLINK_PERF("%s: qos unvote\n", __func__);
+-		schedule_delayed_work(&xprt_ptr->pm_qos_work,
++		queue_delayed_work(system_power_efficient_wq, &xprt_ptr->pm_qos_work,
+ 				msecs_to_jiffies(GLINK_PM_QOS_HOLDOFF_MS));
+ 	}
+ }
+diff --git a/mm/vmstat.c b/mm/vmstat.c
+index 895e21f0d047..4814e0b7de65 100644
+--- a/mm/vmstat.c
++++ b/mm/vmstat.c
+@@ -1702,7 +1702,7 @@ static void vmstat_shepherd(struct work_struct *w)
+ 	}
+ 	put_online_cpus();
+ 
+-	schedule_delayed_work(&shepherd,
++	queue_delayed_work(system_power_efficient_wq, &shepherd,
+ 		round_jiffies_relative(sysctl_stat_interval));
+ }
+ 
+@@ -1715,7 +1715,7 @@ static void __init start_shepherd_timer(void)
+ 			vmstat_update);
+ 
+ 	vmstat_wq = alloc_workqueue("vmstat", WQ_FREEZABLE|WQ_MEM_RECLAIM, 0);
+-	schedule_delayed_work(&shepherd,
++	queue_delayed_work(system_power_efficient_wq, &shepherd,
+ 		round_jiffies_relative(sysctl_stat_interval));
+ }
+ 
+From 3da6f692fd44a62bb22542f960f973eb27ef955c Mon Sep 17 00:00:00 2001
+From: freak07 <michalechner92@googlemail.com>
+Date: Wed, 20 Feb 2019 10:09:25 +0100
+Subject: [PATCH] Add PEWQ's to a few subsystems
+
+qcacld-3.0: queue work on power efficient workqueues
+
+techpack: use power efficient workqueues
+
+drm: msm: use power efficient workqueues
+
+scsi: queue some work on power efficient workqueues
+
+wcnss_wlan: queue work on power efficient workqueues
+
+thermal: queue work on power efficient workqueues
+
+*edit* removed bluecross specific drivers
+Change-Id: I326d24562e16a7557a225e80996ae2d958b57c0f
+
+Signed-off-by: DennySPB <dennyspb@gmail.com>
+---
+ drivers/soc/qcom/wcnss/wcnss_wlan.c | 8 ++++----
+ drivers/thermal/qpnp-temp-alarm.c   | 2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/soc/qcom/wcnss/wcnss_wlan.c b/drivers/soc/qcom/wcnss/wcnss_wlan.c
+index 1634373096a9..896c7d075664 100644
+--- a/drivers/soc/qcom/wcnss/wcnss_wlan.c
++++ b/drivers/soc/qcom/wcnss/wcnss_wlan.c
+@@ -1317,7 +1317,7 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
+ 		schedule_work(&penv->wcnssctrl_version_work);
+ 		schedule_work(&penv->wcnss_pm_config_work);
+ 		cancel_delayed_work(&penv->wcnss_pm_qos_del_req);
+-		schedule_delayed_work(&penv->wcnss_pm_qos_del_req, 0);
++		queue_delayed_work(system_power_efficient_wq, &penv->wcnss_pm_qos_del_req, 0);
+ 		if (penv->wlan_config.is_pronto_vadc && (penv->vadc_dev))
+ 			schedule_work(&penv->wcnss_vadc_work);
+ 		break;
+@@ -2000,7 +2000,7 @@ static void wcnss_notify_vbat(enum qpnp_tm_state state, void *ctx)
+ 	if (rc)
+ 		wcnss_log(ERR, "%s: tm setup failed: %d\n", __func__, rc);
+ 	else
+-		schedule_delayed_work(&penv->vbatt_work,
++		queue_delayed_work(system_power_efficient_wq, &penv->vbatt_work,
+ 				      msecs_to_jiffies(2000));
+ 
+ 	mutex_unlock(&penv->vbat_monitor_mutex);
+@@ -3454,7 +3454,7 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
+ 	} else if ((code == SUBSYS_BEFORE_SHUTDOWN && data && data->crashed) ||
+ 			code == SUBSYS_SOC_RESET) {
+ 		wcnss_disable_pc_add_req();
+-		schedule_delayed_work(&penv->wcnss_pm_qos_del_req,
++		queue_delayed_work(system_power_efficient_wq, &penv->wcnss_pm_qos_del_req,
+ 				      msecs_to_jiffies(WCNSS_PM_QOS_TIMEOUT));
+ 		penv->is_shutdown = 1;
+ 		wcnss_log_debug_regs_on_bite();
+@@ -3466,7 +3466,7 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
+ 		wcnss_disable_pc_remove_req();
+ 	} else if (code == SUBSYS_BEFORE_SHUTDOWN) {
+ 		wcnss_disable_pc_add_req();
+-		schedule_delayed_work(&penv->wcnss_pm_qos_del_req,
++		queue_delayed_work(system_power_efficient_wq, &penv->wcnss_pm_qos_del_req,
+ 				      msecs_to_jiffies(WCNSS_PM_QOS_TIMEOUT));
+ 		penv->is_shutdown = 1;
+ 	} else if (code == SUBSYS_AFTER_POWERUP) {
+diff --git a/drivers/thermal/qpnp-temp-alarm.c b/drivers/thermal/qpnp-temp-alarm.c
+index e9ae4b6318ab..4d7a82b91b9a 100644
+--- a/drivers/thermal/qpnp-temp-alarm.c
++++ b/drivers/thermal/qpnp-temp-alarm.c
+@@ -347,7 +347,7 @@ static irqreturn_t qpnp_tm_isr(int irq, void *data)
+ {
+ 	struct qpnp_tm_chip *chip = data;
+ 
+-	schedule_delayed_work(&chip->irq_work,
++	queue_delayed_work(system_power_efficient_wq, &chip->irq_work,
+ 			msecs_to_jiffies(STATUS_REGISTER_DELAY_MS) + 1);
+ 
+ 	return IRQ_HANDLED;
+ From f2f951d1e14ef16a6bcd0c54757e508f541d4993 Mon Sep 17 00:00:00 2001
+From: Tyler Nijmeh <tylernij@gmail.com>
+Date: Wed, 13 Mar 2019 20:21:57 -0700
+Subject: [PATCH] qcacld-3.0: Do not allow any wakelocks to be held
+
+These contribute to a great amount of idle drain.
+
+Tests: 30 minutes of playing Spotify with the screen off, unplugged.
+
+Signed-off-by: Tyler Nijmeh <tylernij@gmail.com>
+
+ Conflicts:
+	drivers/staging/qca-wifi-host-cmn/qdf/linux/src/qdf_lock.c
+
+Signed-off-by: CryllicBuster273 <cryllicbuster273@pixelexperience.org>
+---
+ .../qdf/linux/src/qdf_lock.c                  | 66 -------------------
+ 1 file changed, 66 deletions(-)
+
+diff --git a/drivers/staging/qca-wifi-host-cmn/qdf/linux/src/qdf_lock.c b/drivers/staging/qca-wifi-host-cmn/qdf/linux/src/qdf_lock.c
+index 2bcba863adee..19fb14284ed1 100644
+--- a/drivers/staging/qca-wifi-host-cmn/qdf/linux/src/qdf_lock.c
++++ b/drivers/staging/qca-wifi-host-cmn/qdf/linux/src/qdf_lock.c
+@@ -240,19 +240,10 @@ qdf_export_symbol(qdf_mutex_release);
+  *
+  * Return: Pointer to the name if it is valid or a default string
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+-const char *qdf_wake_lock_name(qdf_wake_lock_t *lock)
+-{
+-	if (lock->name)
+-		return lock->name;
+-	return "UNNAMED_WAKELOCK";
+-}
+-#else
+ const char *qdf_wake_lock_name(qdf_wake_lock_t *lock)
+ {
+ 	return "NO_WAKELOCK_SUPPORT";
+ }
+-#endif
+ qdf_export_symbol(qdf_wake_lock_name);
+ 
+ /**
+@@ -264,18 +255,10 @@ qdf_export_symbol(qdf_wake_lock_name);
+  * QDF status success: if wake lock is initialized
+  * QDF status failure: if wake lock was not initialized
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+-QDF_STATUS qdf_wake_lock_create(qdf_wake_lock_t *lock, const char *name)
+-{
+-	wakeup_source_init(lock, name);
+-	return QDF_STATUS_SUCCESS;
+-}
+-#else
+ QDF_STATUS qdf_wake_lock_create(qdf_wake_lock_t *lock, const char *name)
+ {
+ 	return QDF_STATUS_SUCCESS;
+ }
+-#endif
+ qdf_export_symbol(qdf_wake_lock_create);
+ 
+ /**
+@@ -287,22 +270,10 @@ qdf_export_symbol(qdf_wake_lock_create);
+  * QDF status success: if wake lock is acquired
+  * QDF status failure: if wake lock was not acquired
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+-QDF_STATUS qdf_wake_lock_acquire(qdf_wake_lock_t *lock, uint32_t reason)
+-{
+-	host_diag_log_wlock(reason, qdf_wake_lock_name(lock),
+-			    WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
+-			    WIFI_POWER_EVENT_WAKELOCK_TAKEN);
+-	__pm_stay_awake(lock);
+-
+-	return QDF_STATUS_SUCCESS;
+-}
+-#else
+ QDF_STATUS qdf_wake_lock_acquire(qdf_wake_lock_t *lock, uint32_t reason)
+ {
+ 	return QDF_STATUS_SUCCESS;
+ }
+-#endif
+ qdf_export_symbol(qdf_wake_lock_acquire);
+ 
+ /**
+@@ -314,27 +285,10 @@ qdf_export_symbol(qdf_wake_lock_acquire);
+  * QDF status success: if wake lock is acquired
+  * QDF status failure: if wake lock was not acquired
+  */
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+-QDF_STATUS qdf_wake_lock_timeout_acquire(qdf_wake_lock_t *lock, uint32_t msec)
+-{
+-	pm_wakeup_ws_event(lock, msec, true);
+-	return QDF_STATUS_SUCCESS;
+-}
+-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-QDF_STATUS qdf_wake_lock_timeout_acquire(qdf_wake_lock_t *lock, uint32_t msec)
+-{
+-	/* Wakelock for Rx is frequent.
+-	 * It is reported only during active debug
+-	 */
+-	__pm_wakeup_event(lock, msec);
+-	return QDF_STATUS_SUCCESS;
+-}
+-#else /* LINUX_VERSION_CODE */
+ QDF_STATUS qdf_wake_lock_timeout_acquire(qdf_wake_lock_t *lock, uint32_t msec)
+ {
+ 	return QDF_STATUS_SUCCESS;
+ }
+-#endif /* LINUX_VERSION_CODE */
+ qdf_export_symbol(qdf_wake_lock_timeout_acquire);
+ 
+ /**
+@@ -346,22 +300,10 @@ qdf_export_symbol(qdf_wake_lock_timeout_acquire);
+  * QDF status success: if wake lock is acquired
+  * QDF status failure: if wake lock was not acquired
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+-QDF_STATUS qdf_wake_lock_release(qdf_wake_lock_t *lock, uint32_t reason)
+-{
+-	host_diag_log_wlock(reason, qdf_wake_lock_name(lock),
+-			    WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
+-			    WIFI_POWER_EVENT_WAKELOCK_RELEASED);
+-	__pm_relax(lock);
+-
+-	return QDF_STATUS_SUCCESS;
+-}
+-#else
+ QDF_STATUS qdf_wake_lock_release(qdf_wake_lock_t *lock, uint32_t reason)
+ {
+ 	return QDF_STATUS_SUCCESS;
+ }
+-#endif
+ qdf_export_symbol(qdf_wake_lock_release);
+ 
+ /**
+@@ -372,18 +314,10 @@ qdf_export_symbol(qdf_wake_lock_release);
+  * QDF status success: if wake lock is acquired
+  * QDF status failure: if wake lock was not acquired
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+-QDF_STATUS qdf_wake_lock_destroy(qdf_wake_lock_t *lock)
+-{
+-	wakeup_source_trash(lock);
+-	return QDF_STATUS_SUCCESS;
+-}
+-#else
+ QDF_STATUS qdf_wake_lock_destroy(qdf_wake_lock_t *lock)
+ {
+ 	return QDF_STATUS_SUCCESS;
+ }
+-#endif
+ qdf_export_symbol(qdf_wake_lock_destroy);
+ 
+ #ifdef CONFIG_MCL
